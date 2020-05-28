@@ -112,7 +112,11 @@ for i in range(0,15):
         print('solve stress')
     solve(rt==0, sigma)
     
-    relup = errornorm(u,u0,norm_type='H1',degree_rise=2)/norm(u,norm_type='H1')
+    
+    Uoldr.vector().axpy(-1, U.vector())
+    relup = norm(Uoldr,'H1')
+    relup /= norm(U,'H1')
+    #relup = errornorm(u,u0,norm_type='H1',degree_rise=2)/norm(u,norm_type='H1')
     print("u update: ", relup)
     if relup < 1e-3: #(u0.vector().axpy(-1.0, u.vector()).norm("linf") / u.vector().norm("linf")) < 1e-4:
         print ("newton iteration: ", i, "Divergance: ", assemble(sqrt(div(u) * div(u))*dx)) #, " Rel change",

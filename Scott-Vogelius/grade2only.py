@@ -5,20 +5,19 @@ import math,sys
 from ufl import nabla_div
 set_log_active(False)
 
-pdeg = 3
+pdeg = 6
 fudg = 10000
-
 reno = 1.
 alfa = 0.01
-#int(sys.argv[0])
-#meshsize= 24 #int(sys.argv[1])
-design = "classic" #str(sys.argv[2])
 lbufr = -1; #float(sys.argv[3])
 rbufr = 4; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
 upright = 0.5
 right = 0.5
+
+alpha_1 = Constant(alfa)
+alpha_2 = Constant(-alfa)
 
 mesh = Mesh("mesh.xml")
 
@@ -27,14 +26,11 @@ vtkfile_navierstokes_P = File('g2p.pvd')
 
 V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+Y = TensorFunctionSpace(mesh, "CG", 1, shape = (9,))
+Ycg = TensorFunctionSpace(mesh, "CG", 1, shape = (3,3))
 
 # define boundary condition
-if False :
-    boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-x[1]*x[1]) + \
-      (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
-                       up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
-else :
-    boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
+boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1]+x[2]*x[2])/(up*up)))","0","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
     
@@ -45,13 +41,9 @@ bc = DirichletBC(V, boundary_exp, "on_boundary")
 r = 1.0e4
 
 
-""" GRADE TWO """
 
-alpha_1 = Constant(alfa)
-alpha_2 = Constant(-alfa)
 
-Y = TensorFunctionSpace(mesh, "CG", 1, shape = (9,))
-Ycg = TensorFunctionSpace(mesh, "CG", 1, shape = (3,3))
+
 sigma = Function(Y)
 #sigma = TestFunction(Y)
 tau = TestFunction(Y)
@@ -143,7 +135,11 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
 
        div_u_norm = sqrt(assemble(div(U)*div(U)*dx(mesh)))
        piter += 1
-       incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=2)/norm(U,norm_type='H1')
+       
+       Uoldr.vector().axpy(-1, U.vector())
+       incrnorm = norm(Uoldr,'H1')
+       incrnorm /= norm(U,'H1')
+       #incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=2)/norm(U,norm_type='H1')
        if(MPI.rank(mesh.mpi_comm()) == 0):
             print("div(u) ",piter , div_u_norm)
     
