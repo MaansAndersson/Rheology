@@ -2,11 +2,11 @@
 from mshr import *
 from dolfin import *
 import math,sys
+from scipy.io import loadmat, savemat
 
 
 
-
-pdeg = 2
+pdeg = 6
 fudg = 10000
 
 dim = 4 #int(sys.argv[0])
@@ -24,6 +24,9 @@ h = CellDiameter(mesh)
 
 vtkfile_stokes_U = File('ust.pvd')
 vtkfile_stokes_P = File('pst.pvd')
+vtkfile_stokes_Uxml = File('ust.xml')
+vtkfile_stokes_Pxml = File('pst.xml')
+
 
 V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
@@ -80,5 +83,11 @@ uold.set_allow_extrapolation(True)
 
 
 ust.vector().axpy(1.0, uold.vector())
-vtkfile_stokes_U << uold
+vtkfile_stokes_U << project(uold,V)
 vtkfile_stokes_P << project(-div(w),Q)
+
+uvec = uold.vector()[:].reshape(len(uold.vector()),1)
+savemat('ust', { 'uvec': uvec }, oned_as='column')
+
+#vtkfile_stokes_Uxml << project(uold,V)
+#vtkfile_stokes_Pxml << project(-div(w),Q)
