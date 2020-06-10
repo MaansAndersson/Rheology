@@ -2,8 +2,8 @@
 from mshr import *
 from dolfin import *
 import math,sys
-
-pdeg = 2 #6
+from scipy.io import loadmat, savemat
+pdeg = 4 #6
 fudg = 10000
 
 reno = 1
@@ -19,18 +19,22 @@ upright = 0.5
 right = 0.5
 
 mesh = Mesh("mesh.xml")
+dim = mesh.ufl_cell()
 
 vtkfile_navierstokes_U = File('unst.pvd')
 vtkfile_navierstokes_P = File('pnst.pvd')
+vtkfile_navierstokes_dU = File('dunst.pvd')
 
 V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
 
 # define boundary condition
-if False :
+if dim == 2 :
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-x[1]*x[1]) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
+                       
+    zf = Expression(("0","0"))
 else :
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1]+x[2]*x[2])/(up*up)))","0","0"), \
@@ -48,7 +52,12 @@ r = 1.0e4
 
 #
 uold = Function(V)
-uold.vector()[:] = 1.0
+uold.vector()[:] = 0.0
+
+ust = Function(V)
+uvec_old = loadmat('ust')['uvec']
+ust.vector().set_local(uvec_old[:,0]
+uold.vector().axpy(1, ust.vector())
 
 kters = 0; max_kters = 9; unorm = 1
 while kters < max_kters and unorm > 1e-6:
@@ -120,5 +129,7 @@ nst = Function(V)
 # nst is the Navier-Stokes solution
 nst.vector().axpy(1.0, uz.vector())
 
-vtkfile_navierstokes_U << nst
+vtkfile_navierstokes_U << project(nst,V)
 vtkfile_navierstokes_P << project(-div(w)/reno,Q)
+nst.vector().axpy(-1,ust.vector())
+vtkfile_navierstokes_dU << project(nst,V)

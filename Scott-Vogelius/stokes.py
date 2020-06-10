@@ -5,11 +5,13 @@ import math,sys
 from scipy.io import loadmat, savemat
 
 
+mesh = Mesh("mesh.xml")
+dim = mesh.ufl_cell()
 
-pdeg = 6
+pdeg = 4
 fudg = 10000
 
-dim = 4 #int(sys.argv[0])
+#int(sys.argv[0])
 #meshsize= 24 #int(sys.argv[1])
 design = "classic" #str(sys.argv[2])
 lbufr = -1; #float(sys.argv[3])
@@ -19,20 +21,19 @@ r1 = 1; #float(sys.argv[4])
 upright = 0.5
 right = 0.5
 
-mesh = Mesh("mesh.xml")
 h = CellDiameter(mesh)
 
 vtkfile_stokes_U = File('ust.pvd')
 vtkfile_stokes_P = File('pst.pvd')
-vtkfile_stokes_Uxml = File('ust.xml')
-vtkfile_stokes_Pxml = File('pst.xml')
+#vtkfile_stokes_Uxml = File('ust.xml')
+#vtkfile_stokes_Pxml = File('pst.xml')
 
 
-V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
-Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+V = VectorFunctionSpace(mesh, "CG", pdeg) # "Lagrange", pdeg)
+Q = FunctionSpace(mesh, "CG", pdeg-1) # pdeg+1)
 
 # define boundary condition
-if False :
+if dim == 2 :
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-x[1]*x[1]) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)

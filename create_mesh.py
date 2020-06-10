@@ -82,6 +82,17 @@ if type == "Göteborg":
 mesh = generate_mesh(geometry,meshsize)
 
 
+if type == "pipe":
+    
+    if dim == 3:
+        print('foo')
+        mesh = RectangleMesh(Point(lbufr, 0.5), Point(right+rbufr, 0), 15, 64, 'crossed')
+        # transform 1/r
+        # rotate 2pi
+    elif dim == 2:
+        mesh = RectangleMesh(Point(lbufr, 1), Point(right+rbufr, -1), 15, 64, 'crossed')
+
+
 
 # Refine
 print(len(mesh.cells()))
