@@ -4,27 +4,30 @@ from dolfin import *
 import math,sys
 from scipy.io import loadmat, savemat
 
+set_log_active(False)
 
 mesh = Mesh("mesh.xml")
-dim = mesh.ufl_cell()
+dim = mesh.geometric_dimension()
+cell = mesh.ufl_cell()
 
-pdeg = 4
+pdeg = 3
+print("pdeg: ", pdeg)
 fudg = 10000
 
 #int(sys.argv[0])
 #meshsize= 24 #int(sys.argv[1])
 design = "classic" #str(sys.argv[2])
 lbufr = -1; #float(sys.argv[3])
-rbufr = 4; #float(sys.argv[4])
+rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
 upright = 0.5
-right = 0.5
+right = 1.0
 
 h = CellDiameter(mesh)
 
-vtkfile_stokes_U = File('ust.pvd')
-vtkfile_stokes_P = File('pst.pvd')
+vtkfile_stokes_U = File('results/ust.pvd')
+vtkfile_stokes_P = File('results/pst.pvd')
 #vtkfile_stokes_Uxml = File('ust.xml')
 #vtkfile_stokes_Pxml = File('pst.xml')
 

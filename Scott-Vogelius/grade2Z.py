@@ -23,14 +23,17 @@ mesh = Mesh("mesh.xml")
 dim = mesh.geometric_dimension()
 print(dim)
 
-vtkfile_navierstokes_U = File('results/g2u.pvd')
-vtkfile_navierstokes_P = File('results/g2p.pvd')
-vtkfile_navierstokes_dU = File('results/grade2-nse.pvd')
+vtkfile_navierstokes_U = File('results/g2uW.pvd')
+vtkfile_navierstokes_P = File('results/g2pW.pvd')
+vtkfile_navierstokes_dU = File('results/grade2W-nse.pvd')
 
 V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
-#Y = TensorFunctionSpace(mesh, "CG", 1, shape = (dim*dim,))
-Ycg = TensorFunctionSpace(mesh, "CG", pdeg, shape = (dim,dim))
+V2 = VectorFunctionSpace(mesh, "CG", pdeg)
+#Y = TensorFunctionSpace(mesh, "CG", 1, shape = (dim,dim))
+
+def in_bdry(x):
+    return x[0] <= lbufr+DOLFIN_EPS
 
 # define boundary condition
 if dim == 2 :
@@ -38,6 +41,8 @@ if dim == 2 :
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
                        
+    WINFLOW = Expression(("0","8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
+
 
 else :
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
@@ -46,32 +51,19 @@ else :
     
 
 bc = DirichletBC(V, boundary_exp, "on_boundary")
+bcW =  DirichletBC(V2, WINFLOW,  in_bdry, 'pointwise')
 
 # set the parameters
 r = 1.0e4
 
 
-
-
-
-sigma = Function(Ycg)
-#sigma = TrialFunction(Y)
-tau = TestFunction(Ycg)
-"""tau_ = as_matrix(((tau[0], tau[1], tau[2]),
-                  (tau[3], tau[4], tau[5]),
-                  (tau[6], tau[7], tau[8])))
-"""
-
+W = Function(V2)
 q = Function(Q)
 u = TrialFunction(V)
 v = TestFunction(V)
-
+v2 = TestFunction(V2)
 Uoldr = Function(V)
 U = Function(V)
-
-
-
-
 
 nst = Function(V)
 uvec_old = loadmat('nst')['uvec']
@@ -84,7 +76,7 @@ q.vector()[:] = 0
 
 h = CellDiameter(mesh)
 gg2_iter = -1
-max_gg2_iter = 5; #10
+max_gg2_iter = 10
 max_piter = 5
 
 #Pre-define variables
@@ -93,13 +85,7 @@ n = FacetNormal(mesh)
 
 def A(z):
     return (grad(z) + grad(z).T)
-        
-sigma = Function(Ycg)
-sigma.vector()[:] = 0
 
-
-#SIGMA_ = Function(Ycg)
-SIGMA = Function(Ycg)
 wgg2 = Function(V)
 while gg2_iter < max_gg2_iter and incrnorm > gtol:
    wgg2.vector()[:] = 0
@@ -107,39 +93,22 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    piter = 0;  div_u_norm = 1
    gg2_iter += 1
    
-   #sigma_ = as_matrix( ((sigma[0], sigma[1], sigma[2]),
-    #                    (sigma[3], sigma[4], sigma[5]),
-     #                   (sigma[6], sigma[7], sigma[8])) )
-
    # FORMS FOR STRESS
-   rz = inner(sigma\
-   + alpha_1*dot(U,    nabla_grad(sigma)) \
-   - (alpha_1*grad(U).T*A(U) \
-   + (alpha_1 + alpha_2)*A(U)*A(U) \
-   - reno*outer(U,U) \
-   - alpha_1*q*grad(U).T \
-   + alpha_1*SIGMA*grad(U).T),tau)*dx(mesh)
-   #+ 0.01*alpha_1*h*inner(nabla_grad(sigma),nabla_grad(tau)*dx(mesh) \
-   #+ 0.01*alpha_1*h*inner(dot(U,nabla_grad(sigma_)), dot(U,nabla_grad(tau_)))*dx(mesh)
-   #+ inner(0.5*alpha_1*div(U)*sigma_,tau_)*dx(mesh) \
-   #+ abs(alpha_1*dot(U('-'),n('-')))*conditional(dot(U('-'),n('-'))<0,1,0)*inner(jump(sigma_),tau_('+'))*dS(mesh)
-
-
+   rz =  inner(W \
+     + alpha_1*dot(U, nabla_grad(W)) \
+     - div(alpha_1*grad(U).T*A(U) \
+     + (alpha_1 + alpha_2)*A(U)*A(U) \
+     - outer(U,U) \
+     - alpha_1*q*grad(U).T), v2)*dx(mesh) \
+     
+  # + abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W),v2('+'))*dS(mesh)
 
    print('solving for stress')
-   solve(rz == 0, sigma, solver_parameters={"newton_solver": {"relative_tolerance": 1e-11}})# bcY,
-   #sigma = Function(Y)
-   #solve(T_gg2 == N_gg2, sigma)
-   assign(SIGMA,sigma)
-   #SIGMA_ = as_matrix(((SIGMA[0], SIGMA[1]), (SIGMA[2], SIGMA[3])))
+   solve(rz == 0, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-11}})
    
-   """SIGMA_ = as_matrix( ((sigma[0], sigma[1], sigma[2]),
-                       (sigma[3], sigma[4], sigma[5]),
-                       (sigma[6], sigma[7], sigma[8])) )"""
    # FORMS FOR IPM
    a_gg2 = inner(grad(u), grad(v))*dx(mesh) + r*div(u)*div(v)*dx(mesh)
-   #F_gg2 = inner(div(project(SIGMA_,Ycg)),v)*dx(mesh)
-   F_gg2 = inner(div(SIGMA),v)*dx(mesh) #inner(dot(SIGMA_,n),v)*ds-reno*inner(SIGMA_,grad(v))*dx(mesh) #
+   F_gg2 = inner(W,v)*dx(mesh)
    b_gg2 = -div(wgg2)*div(v)*dx(mesh)
    
    
@@ -159,23 +128,20 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
        #Uoldr.vector().axpy(-1, U.vector())
        #incrnorm = norm(Uoldr,'H1')
        #incrnorm /= norm(U,'H1')
-       #incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=2)/norm(U,norm_type='H1')
+       
+       #Uoldr.vector()[:] = 0
+       #Uoldr.vector().axpy(1, U.vector())
+       incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=0)/norm(U,norm_type='H1')
        if(MPI.rank(mesh.mpi_comm()) == 0):
             print("div(u) ",piter , div_u_norm)
     
-    
-   
-   # USA
    assign(q, project(-(div(wgg2)),Q))
-   #q = project(-div(wgg2)/reno,Q) #/reno
    if(MPI.rank(mesh.mpi_comm()) == 0):
        print( "   IPM iter_no=",piter,"div_u_norm="," %.2e"%div_u_norm)
        print( gg2_iter,"change="," %.3e"%incrnorm)
    #print(errornorm(SIGMA,sigma0,norm_type='H1',degree_rise=2)/norm(SIGMA,norm_type='H1'))
    
 
-
-   
    Uoldr = Function(V)
    Uoldr.vector().axpy(1, U.vector())
 
@@ -188,12 +154,6 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    #G2D.vector().axpy(-1, nst.vector())
    #vtkfile_GENERAL_GRADE2 << project(G2D,V)
    #vtkfile_GENERAL_GRADE2 << project(q,Q)
-
-   #vtkfile_GENERAL_GRADE2_sigma << project(sigma_,Ycg)
-   #TAU = alfa*(A(U)*grad(U)+grad(U).T*A(U)+dot(U,nabla_grad(A(U))))-alfa*(A(U)*A(U))-reno*outer(U,U)
-   #vtkfile_GENERAL_GRADE2_sigma << project(TAU,Ycg)
-#G2P = Function(V)
-#G2P.vector().axpy(1, SIGMA[0,0].vector())
 
 #Enorm = norm(goldr.vector().axpy(-1, Uoldr.vector()),norm_type='H1')
 #print(Enorm)

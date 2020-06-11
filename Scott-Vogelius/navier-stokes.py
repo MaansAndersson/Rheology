@@ -3,27 +3,27 @@ from mshr import *
 from dolfin import *
 import math,sys
 from scipy.io import loadmat, savemat
-pdeg = 4 #6
+set_log_active(False)
+
+pdeg = 3 #6
 fudg = 10000
 
-reno = 1
+reno = 1.
 
 
-#meshsize= 24 #int(sys.argv[1])
-design = "classic" #str(sys.argv[2])
 lbufr = -1; #float(sys.argv[3])
-rbufr = 4; #float(sys.argv[4])
+rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
 upright = 0.5
-right = 0.5
+right = 1.
 
 mesh = Mesh("mesh.xml")
-dim = mesh.ufl_cell()
+dim = mesh.geometric_dimension()
 
-vtkfile_navierstokes_U = File('unst.pvd')
-vtkfile_navierstokes_P = File('pnst.pvd')
-vtkfile_navierstokes_dU = File('dunst.pvd')
+vtkfile_navierstokes_U = File('results/unst.pvd')
+vtkfile_navierstokes_P = File('results/pnst.pvd')
+vtkfile_navierstokes_dU = File('results/dunst.pvd')
 
 V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
@@ -34,7 +34,7 @@ if dim == 2 :
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
                        
-    zf = Expression(("0","0"))
+    zf = Expression(("0","0"), degree = pdeg)
 else :
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1]+x[2]*x[2])/(up*up)))","0","0"), \
@@ -56,7 +56,7 @@ uold.vector()[:] = 0.0
 
 ust = Function(V)
 uvec_old = loadmat('ust')['uvec']
-ust.vector().set_local(uvec_old[:,0]
+ust.vector().set_local(uvec_old[:,0])
 uold.vector().axpy(1, ust.vector())
 
 kters = 0; max_kters = 9; unorm = 1
@@ -129,7 +129,12 @@ nst = Function(V)
 # nst is the Navier-Stokes solution
 nst.vector().axpy(1.0, uz.vector())
 
+uvec = uz.vector()[:].reshape(len(uz.vector()),1)
+savemat('nst', { 'uvec': uvec }, oned_as='column')
+
 vtkfile_navierstokes_U << project(nst,V)
 vtkfile_navierstokes_P << project(-div(w)/reno,Q)
 nst.vector().axpy(-1,ust.vector())
 vtkfile_navierstokes_dU << project(nst,V)
+
+
