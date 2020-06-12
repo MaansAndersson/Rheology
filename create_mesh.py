@@ -5,6 +5,7 @@
 from mshr import *
 from dolfin import *
 import math,sys
+import numpy
 
 
 
@@ -90,6 +91,15 @@ if design == "Göteborg":
         geometry = Polygon(MeshNodeList)
 
 
+def NozzleRadius2(x,y,H,r0,r1):
+#    if x > 0 and x < right :
+    #return x,  r0*y/numpy.sqrt((right-x)/H*((pow(r0,2)/pow(r1,2))-1)+1)*(-1/(1-numpy.exp(-2*100*(x)))+1/(1-numpy.exp(-2*100*(x-right))))
+    #return x,  numpy.nan_to_num(r0*y/numpy.sqrt((right-x)/H*((pow(r0,2)/pow(r1,2))-1)+1)*numpy.bitwise_and(x > 0, x < right)) + ( x < 0 )*y + 0.5*( x > right )*y
+    
+     return x,  (numpy.nan_to_num(-y/(1+x))*numpy.bitwise_and(x > 0, x < right)) + ( x < 0 )*y + 0.5*( x > right )*y
+ #   else :
+  #      return x, y
+
 if design != 'pipe':
     mesh = generate_mesh(geometry,meshsize)
     
@@ -97,12 +107,36 @@ elif design == 'pipe':
     
     if dim == 3:
         print('foo')
-        mesh = RectangleMesh(Point(lbufr, 0.5), Point(right+rbufr, 0), 15, 64, 'crossed')
+        mesh = RectangleMesh(Point(lbufr, 0.5), Point(right+rbufr, 0), 32, 64, 'crossed')
         # transform 1/r
         # rotate 2pi
     elif dim == 2:
-        mesh = RectangleMesh(Point(lbufr, 1), Point(right+rbufr, -1), 15, 64, 'crossed')
-
+ 
+    
+        #mesh0 = RectangleMesh(Point(lbufr, 1), Point(right, -1), 64, 64, 'crossed')
+        mesh = RectangleMesh(Point(lbufr, -1), Point(right+rbufr, 1), 3*meshsize, meshsize, 'crossed')
+        
+        
+        x = mesh.coordinates()[:,0]
+        y = mesh.coordinates()[:,1]
+            
+        #x_hat, y_hat = x, y
+        #xy_hat_coor = numpy.array([x_hat, y_hat]).transpose()
+        #mesh.coordinates()[:] = xy_hat_coor
+        
+        
+        
+        x = mesh.coordinates()[:,0]
+        y = mesh.coordinates()[:,1]
+            
+        x_hat, y_hat = NozzleRadius2(x, y, H, r0, r1)
+        
+        
+        print(min(x_hat))
+        xy_hat_coor = numpy.array([x_hat, y_hat]).transpose()
+        mesh.coordinates()[:] = xy_hat_coor
+        
+       
 
 
 # Refine
