@@ -47,6 +47,7 @@ if design == "classic":
         dolfin.Point(lbufr,  1.0)]
 
         geometry = Polygon(A)
+    mesh = generate_mesh(geometry,meshsize)
     
     
 """ Geometry based on "" "" """
@@ -89,27 +90,47 @@ if design == "Göteborg":
         MeshNodeList.append(dolfin.Point(lbufr, 1.0))
 
         geometry = Polygon(MeshNodeList)
-
+    mesh = generate_mesh(geometry,meshsize)
 
 def NozzleRadius2(x,y,H,r0,r1):
 #    if x > 0 and x < right :
     #return x,  r0*y/numpy.sqrt((right-x)/H*((pow(r0,2)/pow(r1,2))-1)+1)*(-1/(1-numpy.exp(-2*100*(x)))+1/(1-numpy.exp(-2*100*(x-right))))
-    #return x,  numpy.nan_to_num(r0*y/numpy.sqrt((right-x)/H*((pow(r0,2)/pow(r1,2))-1)+1)*numpy.bitwise_and(x > 0, x < right)) + ( x < 0 )*y + 0.5*( x > right )*y
-    
+     return x,  numpy.nan_to_num(r0*y/numpy.sqrt((right-x)/H*((pow(r0,2)/pow(r1,2))-1)+1)*numpy.bitwise_and(x > 0, x < right)) + ( x < 0 )*y + 0.5*( x > right )*y
+
+def ClassicNozzle(x,y,H,r0,r1):
      return x,  (numpy.nan_to_num(-y/(1+x))*numpy.bitwise_and(x > 0, x < right)) + ( x < 0 )*y + 0.5*( x > right )*y
  #   else :
   #      return x, y
 
-if design != 'pipe':
-    mesh = generate_mesh(geometry,meshsize)
+if design == 'pipe':
+    mesh = RectangleMesh(Point(lbufr, -1), Point(right+rbufr, 1), 3*meshsize, meshsize, 'crossed')
     
-elif design == 'pipe':
+if design == 'GöteborgCrossed':
     
     if dim == 3:
         print('foo')
-        mesh = RectangleMesh(Point(lbufr, 0.5), Point(right+rbufr, 0), 32, 64, 'crossed')
+        mesh0 = Mesh()
+        #mesh = RectangleMesh(Point(lbufr, 0.5), Point(right+rbufr, 0), 32, 64, 'crossed')
         # transform 1/r
         # rotate 2pi
+        
+        mesh = RectangleMesh(Point(lbufr, -1), Point(right+rbufr, 1), 3*meshsize, meshsize, 'crossed')
+        
+        x = mesh.coordinates()[:,0]
+        y = mesh.coordinates()[:,1]
+        #z = mesh.coordinates()[:,1]
+        
+        #y_temp =
+        #z_temp =
+        print(mesh.cells())
+            
+        x_hat, y_hat = NozzleRadius2(x, y, H, r0, r1)
+        
+        print(min(x_hat))
+        xyz_hat_coor = numpy.array([x_hat, y_hat]).transpose()
+        mesh0.coordinates()[:] = xyz_hat_coor
+        #mesh0.rotate(mesh0,20,2)
+        mesh = mesh0
     elif dim == 2:
  
     
@@ -120,7 +141,7 @@ elif design == 'pipe':
         x = mesh.coordinates()[:,0]
         y = mesh.coordinates()[:,1]
             
-        #x_hat, y_hat = x, y
+        #x_hat, y_hat = x, y Density
         #xy_hat_coor = numpy.array([x_hat, y_hat]).transpose()
         #mesh.coordinates()[:] = xy_hat_coor
         

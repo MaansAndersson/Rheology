@@ -10,7 +10,7 @@ mesh = Mesh("mesh.xml")
 dim = mesh.geometric_dimension()
 cell = mesh.ufl_cell()
 
-pdeg = 3
+pdeg = 4
 print("pdeg: ", pdeg)
 fudg = 10000
 
@@ -21,7 +21,7 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5
+upright = 1.0; #0.5
 right = 1.0
 
 h = CellDiameter(mesh)
@@ -90,6 +90,9 @@ ust.vector().axpy(1.0, uold.vector())
 vtkfile_stokes_U << project(uold,V)
 vtkfile_stokes_P << project(-div(w),Q)
 
+
+
+#Not MPI-safe.
 uvec = uold.vector()[:].reshape(len(uold.vector()),1)
 savemat('ust', { 'uvec': uvec }, oned_as='column')
 

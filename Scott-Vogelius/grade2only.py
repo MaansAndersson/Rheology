@@ -5,15 +5,15 @@ from scipy.io import loadmat, savemat
 from ufl import nabla_div
 #set_log_active(False)
 
-pdeg = 3
+pdeg = 4 
 fudg = 10000
 reno = 1.
-alfa = 0.01
+alfa = float(sys.argv[1]) #0.01
 lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5
+upright = 1.0 #0.5
 right = 1.0 #0.5
 
 alpha_1 = Constant(alfa)
@@ -159,7 +159,7 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
        #Uoldr.vector().axpy(-1, U.vector())
        #incrnorm = norm(Uoldr,'H1')
        #incrnorm /= norm(U,'H1')
-       #incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=2)/norm(U,norm_type='H1')
+       incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=0)/norm(U,norm_type='H1')
        if(MPI.rank(mesh.mpi_comm()) == 0):
             print("div(u) ",piter , div_u_norm)
     
@@ -184,19 +184,21 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
     #assign(G2D,U)
 
    vtkfile_navierstokes_U << project(U,V)
-   vtkfile_navierstokes_P << q
-   #G2D.vector().axpy(-1, nst.vector())
-   #vtkfile_GENERAL_GRADE2 << project(G2D,V)
-   #vtkfile_GENERAL_GRADE2 << project(q,Q)
-
-   #vtkfile_GENERAL_GRADE2_sigma << project(sigma_,Ycg)
-   #TAU = alfa*(A(U)*grad(U)+grad(U).T*A(U)+dot(U,nabla_grad(A(U))))-alfa*(A(U)*A(U))-reno*outer(U,U)
-   #vtkfile_GENERAL_GRADE2_sigma << project(TAU,Ycg)
-#G2P = Function(V)
-#G2P.vector().axpy(1, SIGMA[0,0].vector())
+   #vtkfile_navierstokes_P << q
+  # vtkfile_navierstokes_P << project(sigma,Ycg)
+  # vtkfile_navierstokes_P << project(div(sigma),V)
 
 #Enorm = norm(goldr.vector().axpy(-1, Uoldr.vector()),norm_type='H1')
 #print(Enorm)
+Analytic_pressusre = Expression(( "-2*x[0] + (2*a1+a2)*(4*x[1]*x[1]) + 3"), degree=pdeg,a1=alpha_1,a2=alpha_2 )
+
+P = project(q + alpha_1*dot(U,grad(q)),Q)
+
+vtkfile_navierstokes_P << P
+vtkfile_navierstokes_P << project(Analytic_pressusre,Q)
+vtkfile_navierstokes_P << project(P-Analytic_pressusre,Q)
+
+print('delta pnorm: ', norm( project(P-Analytic_pressusre,Q), norm_type='L2'))
 
 U.vector().axpy(-1,nst.vector())
 vtkfile_navierstokes_dU << project(U,V)

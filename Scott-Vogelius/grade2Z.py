@@ -5,15 +5,15 @@ from scipy.io import loadmat, savemat
 from ufl import nabla_div
 #set_log_active(False)
 
-pdeg = 3
+pdeg = 4 
 fudg = 10000
 reno = 1.
-alfa = 0.01
+alfa = float(sys.argv[1]) #0.01
 lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5
+upright = 1.0 #0.5
 right = 1.0 #0.5
 
 alpha_1 = Constant(alfa)
@@ -76,7 +76,7 @@ q.vector()[:] = 0
 
 h = CellDiameter(mesh)
 gg2_iter = -1
-max_gg2_iter = 10
+max_gg2_iter = 5
 max_piter = 5
 
 #Pre-define variables
@@ -100,11 +100,12 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
      + (alpha_1 + alpha_2)*A(U)*A(U) \
      - outer(U,U) \
      - alpha_1*q*grad(U).T), v2)*dx(mesh) \
+     #+ 1E-4*h*inner(dot(U,grad(W)), dot(U,grad(v2)))*dx(mesh)
      
   # + abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W),v2('+'))*dS(mesh)
 
    print('solving for stress')
-   solve(rz == 0, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-11}})
+   solve(rz == 0, W, solver_parameters={"newton_solver": {"relative_tolerance": 1e-11}})
    
    # FORMS FOR IPM
    a_gg2 = inner(grad(u), grad(v))*dx(mesh) + r*div(u)*div(v)*dx(mesh)
@@ -150,13 +151,27 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
     #assign(G2D,U)
 
    vtkfile_navierstokes_U << project(U,V)
-   vtkfile_navierstokes_P << q
+   #vtkfile_navierstokes_P << q
+   #vtkfile_navierstokes_P << project(W,V)
    #G2D.vector().axpy(-1, nst.vector())
    #vtkfile_GENERAL_GRADE2 << project(G2D,V)
    #vtkfile_GENERAL_GRADE2 << project(q,Q)
 
+
+Analytic_pressusre = Expression(( "2*2*x[0] + (2*a1+a2)*(-2*x[1]*x[1])"), degree=pdeg,a1=alpha_1,a2=alpha_2 )
+
+
 #Enorm = norm(goldr.vector().axpy(-1, Uoldr.vector()),norm_type='H1')
 #print(Enorm)
+Analytic_pressusre = Expression(( "-2*x[0] + (2*a1+a2)*(4*x[1]*x[1]) + 3"), degree=pdeg,a1=alpha_1,a2=alpha_2 )
+
+P = project(q + alpha_1*dot(U,grad(q)),Q)
+
+vtkfile_navierstokes_P << P
+vtkfile_navierstokes_P << project(Analytic_pressusre,Q)
+vtkfile_navierstokes_P << project(P-Analytic_pressusre,Q)
+
+print(norm( project(P-Analytic_pressusre,Q), norm_type='L2'))
 
 U.vector().axpy(-1,nst.vector())
 vtkfile_navierstokes_dU << project(U,V)
