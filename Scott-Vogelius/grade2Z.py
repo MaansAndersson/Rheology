@@ -41,7 +41,7 @@ if dim == 2 :
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
                        
-    WINFLOW = Expression(("0","8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
+    WINFLOW = Expression(("0","exp(-10000*(-1-x[0])*(-1-x[0]))*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
 
 
 else :
@@ -100,12 +100,12 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
      + (alpha_1 + alpha_2)*A(U)*A(U) \
      - outer(U,U) \
      - alpha_1*q*grad(U).T), v2)*dx(mesh) \
-     #+ 1E-4*h*inner(dot(U,grad(W)), dot(U,grad(v2)))*dx(mesh)
+     + 1E-4*h*inner(dot(U,grad(W)), dot(U,grad(v2)))*dx(mesh)
      
   # + abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W),v2('+'))*dS(mesh)
 
    print('solving for stress')
-   solve(rz == 0, W, solver_parameters={"newton_solver": {"relative_tolerance": 1e-11}})
+   solve(rz == 0, W, solver_parameters={"newton_solver": {"relative_tolerance": 1e-11}}) #bcW
    
    # FORMS FOR IPM
    a_gg2 = inner(grad(u), grad(v))*dx(mesh) + r*div(u)*div(v)*dx(mesh)
@@ -158,20 +158,25 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    #vtkfile_GENERAL_GRADE2 << project(q,Q)
 
 
-Analytic_pressusre = Expression(( "2*2*x[0] + (2*a1+a2)*(-2*x[1]*x[1])"), degree=pdeg,a1=alpha_1,a2=alpha_2 )
-
-
 #Enorm = norm(goldr.vector().axpy(-1, Uoldr.vector()),norm_type='H1')
 #print(Enorm)
-Analytic_pressusre = Expression(( "-2*x[0] + (2*a1+a2)*(4*x[1]*x[1]) + 3"), degree=pdeg,a1=alpha_1,a2=alpha_2 )
+Analytic_pressure = Expression(( "-2*((x[0]-1.5)) + (2*a1+a2)*(4*x[1]*x[1])"), degree=pdeg, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
+
+Analytic_Dq_1 = Expression(("-2", "2*(2*a1+a2)*(4*x[1]) - a1*4*x[1]"), degree=pdeg, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
 
 P = project(q + alpha_1*dot(U,grad(q)),Q)
 
 vtkfile_navierstokes_P << P
-vtkfile_navierstokes_P << project(Analytic_pressusre,Q)
-vtkfile_navierstokes_P << project(P-Analytic_pressusre,Q)
+vtkfile_navierstokes_P << project(Analytic_pressure,Q)
+vtkfile_navierstokes_P << project(Analytic_pressure-P,Q)
+vtkfile_navierstokes_P << project(-2-grad(q)[0],Q)
+vtkfile_navierstokes_P << project(Analytic_Dq_1[1]-grad(q)[1],Q)
 
-print(norm( project(P-Analytic_pressusre,Q), norm_type='L2'))
+print('delta pnorm: ', norm( project(P-Analytic_pressure,Q), norm_type='L2'))
+print('delta Qgradnorm: ', norm( project(grad(q)-Analytic_Dq_1,V2), norm_type='L2'))
+
+
+
 
 U.vector().axpy(-1,nst.vector())
 vtkfile_navierstokes_dU << project(U,V)
