@@ -98,7 +98,9 @@ def NozzleRadius2(x,y,H,r0,r1):
      return x,  numpy.nan_to_num(r0*y/numpy.sqrt((right-x)/H*((pow(r0,2)/pow(r1,2))-1)+1)*numpy.bitwise_and(x > 0, x < right)) + ( x < 0 )*y + 0.5*( x > right )*y
 
 def ClassicNozzle(x,y,H,r0,r1):
-     return x,  (numpy.nan_to_num(-y/(1+x))*numpy.bitwise_and(x > 0, x < right)) + ( x < 0 )*y + 0.5*( x > right )*y
+     return x,  (y*(1-0.5*x)*numpy.bitwise_and(x > 0, x < right)) + ( x < 0 )*y + 0.5*( x > right )*y
+    
+     
  #   else :
   #      return x, y
 
@@ -156,7 +158,41 @@ if design == 'GöteborgCrossed':
         print(min(x_hat))
         xy_hat_coor = numpy.array([x_hat, y_hat]).transpose()
         mesh.coordinates()[:] = xy_hat_coor
+
+
+
+if design == 'ClassicCrossed':
+   
+   if dim == 3:
+       print('foo')
+   elif dim == 2:
+
+   
+       #mesh0 = RectangleMesh(Point(lbufr, 1), Point(right, -1), 64, 64, 'crossed')
+       mesh = RectangleMesh(Point(lbufr, -1), Point(right+rbufr, 1), 3*meshsize, meshsize, 'crossed')
+       
+       
+       x = mesh.coordinates()[:,0]
+       y = mesh.coordinates()[:,1]
+           
+       #x_hat, y_hat = x, y Density
+       #xy_hat_coor = numpy.array([x_hat, y_hat]).transpose()
+       #mesh.coordinates()[:] = xy_hat_coor
+       
+       
+       
+       x = mesh.coordinates()[:,0]
+       y = mesh.coordinates()[:,1]
+           
+       x_hat, y_hat = ClassicNozzle(x, y, H, r0, r1)
+       
+       
+       print(min(x_hat))
+       xy_hat_coor = numpy.array([x_hat, y_hat]).transpose()
+       mesh.coordinates()[:] = xy_hat_coor
+       
         
+
        
 
 

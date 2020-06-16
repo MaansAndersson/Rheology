@@ -7,13 +7,13 @@ from ufl import nabla_div
 
 pdeg = 4 
 fudg = 10000
-reno = 1.
+reno = 2.
 alfa = float(sys.argv[1]) #0.01
 lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 1.0 #0.5
+upright = 0.5
 right = 1.0 #0.5
 
 alpha_1 = Constant(alfa)
@@ -29,7 +29,7 @@ vtkfile_navierstokes_dU = File('results/grade2W-nse.pvd')
 
 V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
-V2 = VectorFunctionSpace(mesh, "CG", pdeg)
+V2 = VectorFunctionSpace(mesh, "CG", pdeg-3)
 #Y = TensorFunctionSpace(mesh, "CG", 1, shape = (dim,dim))
 
 def in_bdry(x):
@@ -98,9 +98,9 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
      + alpha_1*dot(U, nabla_grad(W)) \
      - div(alpha_1*grad(U).T*A(U) \
      + (alpha_1 + alpha_2)*A(U)*A(U) \
-     - outer(U,U) \
+     - reno*outer(U,U) \
      - alpha_1*q*grad(U).T), v2)*dx(mesh) \
-     + 1E-4*h*inner(dot(U,grad(W)), dot(U,grad(v2)))*dx(mesh)
+     + 0.001*alpha_1*h*inner(dot(U,grad(W)), dot(U,grad(v2)))*dx(mesh)
      
   # + abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W),v2('+'))*dS(mesh)
 

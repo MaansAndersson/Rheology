@@ -21,7 +21,7 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 1.0; #0.5
+upright = .5; #0.5
 right = 1.0
 
 h = CellDiameter(mesh)

@@ -13,7 +13,7 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 1.0 #0.5
+upright = 0.5 #0.5
 right = 1.0 #0.5
 
 alpha_1 = Constant(alfa)
@@ -120,8 +120,8 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    - reno*outer(U,U) \
    - alpha_1*q*grad(U).T \
    + alpha_1*SIGMA*grad(U).T),tau)*dx(mesh) \
-   #+ 1e-2*h*inner(nabla_grad(sigma),nabla_grad(tau))*dx(mesh)
-   #+ 0.01*alpha_1*h*inner(dot(U,nabla_grad(sigma_)), dot(U,nabla_grad(tau_)))*dx(mesh)
+   + alpha_1*h*inner(dot(U,nabla_grad(sigma)), dot(U,nabla_grad(tau)))*dx(mesh)
+   #+ alpha_1*h*inner(nabla_grad(sigma),nabla_grad(tau))*dx(mesh)
    #+ inner(0.5*alpha_1*div(U)*sigma_,tau_)*dx(mesh) \
    #+ abs(alpha_1*dot(U('-'),n('-')))*conditional(dot(U('-'),n('-'))<0,1,0)*inner(jump(sigma_),tau_('+'))*dS(mesh)
 

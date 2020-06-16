@@ -8,14 +8,14 @@ set_log_active(False)
 pdeg = 4  #6
 fudg = 10000
 
-reno = 1.
+reno = 2.
 
 
 lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 1. #0.5
+upright = 0.5 #0.5
 right = 1.
 
 mesh = Mesh("mesh.xml")
