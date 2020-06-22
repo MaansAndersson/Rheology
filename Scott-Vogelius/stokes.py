@@ -3,6 +3,7 @@ from mshr import *
 from dolfin import *
 import math,sys
 from scipy.io import loadmat, savemat
+from timeit import default_timer as timer
 
 set_log_active(False)
 
@@ -21,7 +22,7 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = .5; #0.5
+upright = 0.5
 right = 1.0
 
 h = CellDiameter(mesh)
@@ -32,8 +33,9 @@ vtkfile_stokes_P = File('results/pst.pvd')
 #vtkfile_stokes_Pxml = File('pst.xml')
 
 
-V = VectorFunctionSpace(mesh, "CG", pdeg) # "Lagrange", pdeg)
-Q = FunctionSpace(mesh, "CG", pdeg-1) # pdeg+1)
+V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
+
+Q = FunctionSpace(mesh, "CG", pdeg) # pdeg+1)
 
 # define boundary condition
 if dim == 2 :
@@ -68,10 +70,29 @@ pdes = LinearVariationalProblem(asf, bs, uold, bc)
 solvers = LinearVariationalSolver(pdes)
 # Stokes solution
 # Scott-Vogelius iterated penalty method
-iters = 0; max_iters = 5; div_u_norm = 1
+iters = 0; max_iters = 10; div_u_norm = 1
 while iters < max_iters and div_u_norm > 1e-10:
 # solve and update w
-    solvers.solve()
+    start = timer()
+    A = assemble(asf)
+    b = assemble(bs)
+    end = timer()
+    print('Assemble time: ', end - start)
+    
+    start = timer()
+    bc.apply(A)
+    bc.apply(b)
+    end = timer()
+    print('Apply BC time: ', end - start)
+    
+    start = timer()
+    solve(A, uold.vector(), b)
+    end = timer()
+    print('Linear solver time: ', end - start)
+
+
+    
+    #solvers.solve()
     w.vector().axpy(r, uold.vector())
 # find the L^2 norm of div(u) to check stopping condition
     div_u_norm = sqrt(assemble(div(uold)*div(uold)*dx(mesh)))
