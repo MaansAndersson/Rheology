@@ -7,13 +7,13 @@ from ufl import nabla_div
 
 pdeg = 4 
 fudg = 10000
-reno = 1.
-alfa = float(sys.argv[1]) #0.01
+reno = float(sys.argv[1])
+alfa = float(sys.argv[2])
 lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5 #0.5
+upright = 0.5 #0.5 #0.5
 right = 1.0 #0.5
 
 alpha_1 = Constant(alfa)
@@ -39,7 +39,8 @@ if dim == 2 :
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
                        
-
+    
+    WINFLOW = Expression(("0","0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
 else :
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1]+x[2]*x[2])/(up*up)))","0","0"), \
@@ -120,7 +121,7 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    - reno*outer(U,U) \
    - alpha_1*q*grad(U).T \
    + alpha_1*SIGMA*grad(U).T),tau)*dx(mesh) \
-   + alpha_1*h*inner(dot(U,nabla_grad(sigma)), dot(U,nabla_grad(tau)))*dx(mesh)
+   #+ alpha_1*h*inner(dot(U,nabla_grad(sigma)), dot(U,nabla_grad(tau)))*dx(mesh)
    #+ alpha_1*h*inner(nabla_grad(sigma),nabla_grad(tau))*dx(mesh)
    #+ inner(0.5*alpha_1*div(U)*sigma_,tau_)*dx(mesh) \
    #+ abs(alpha_1*dot(U('-'),n('-')))*conditional(dot(U('-'),n('-'))<0,1,0)*inner(jump(sigma_),tau_('+'))*dS(mesh)
@@ -201,9 +202,13 @@ vtkfile_navierstokes_P << project(Analytic_pressure,Q)
 vtkfile_navierstokes_P << project(Analytic_pressure-P,Q)
 vtkfile_navierstokes_P << project(-2-grad(q)[0],Q)
 vtkfile_navierstokes_P << project(Analytic_Dq_1[1]-grad(q)[1],Q)
+vtkfile_navierstokes_P << project(div(sigma),V)
+vtkfile_navierstokes_P << project(WINFLOW,V)
+vtkfile_navierstokes_P << project(div(sigma)-WINFLOW,V)
 
 print('delta pnorm: ', norm( project(P-Analytic_pressure,Q), norm_type='L2'))
-print('delta Qgradnorm: ', norm( project(grad(q)-Analytic_Dq_1,V2), norm_type='L2'))
+print('delta Qgradnorm: ', norm( project(grad(q)-Analytic_Dq_1,V), norm_type='L2'))
+print('delta Wnorm: ', norm( project(div(sigma)-WINFLOW,V), norm_type='L2'))
 
 
 

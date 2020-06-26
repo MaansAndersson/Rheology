@@ -7,13 +7,13 @@ from ufl import nabla_div
 
 pdeg = 4 
 fudg = 10000
-reno = 2.
-alfa = float(sys.argv[1]) #0.01
+reno = float(sys.argv[1])
+alfa = float(sys.argv[2]) #0.01
 lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5
+upright = .5 #0.5 #0.5
 right = 1.0 #0.5
 
 alpha_1 = Constant(alfa)
@@ -22,6 +22,8 @@ alpha_2 = Constant(-alfa)
 mesh = Mesh("mesh.xml")
 dim = mesh.geometric_dimension()
 print(dim)
+cell = mesh.ufl_cell()
+print("pdeg: ", pdeg)
 
 vtkfile_navierstokes_U = File('results/g2uW.pvd')
 vtkfile_navierstokes_P = File('results/g2pW.pvd')
@@ -41,7 +43,7 @@ if dim == 2 :
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
                        
-    WINFLOW = Expression(("0","exp(-10000*(-1-x[0])*(-1-x[0]))*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
+    WINFLOW = Expression(("0","0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
 
 
 else :
@@ -54,7 +56,7 @@ bc = DirichletBC(V, boundary_exp, "on_boundary")
 bcW =  DirichletBC(V2, WINFLOW,  in_bdry, 'pointwise')
 
 # set the parameters
-r = 1.0e4
+r = 1.0e5
 
 
 W = Function(V2)
@@ -63,12 +65,14 @@ u = TrialFunction(V)
 v = TestFunction(V)
 v2 = TestFunction(V2)
 Uoldr = Function(V)
-U = Function(V)
+U = Function(V,'nst.xml')
 
 nst = Function(V)
-uvec_old = loadmat('nst')['uvec']
-nst.vector().set_local(uvec_old[:,0])
-U.vector().axpy(1, nst.vector())
+nst.vector()[:] = U.vector()[:]
+if False:
+    uvec_old = loadmat('nst')['uvec']
+    nst.vector().set_local(uvec_old[:,0])
+    U.vector().axpy(1, nst.vector())
 #inintial guess
 #U.vector()[:] = 1 # Should be NSE.
 q.vector()[:] = 0
@@ -76,11 +80,11 @@ q.vector()[:] = 0
 
 h = CellDiameter(mesh)
 gg2_iter = -1
-max_gg2_iter = 5
-max_piter = 5
+max_gg2_iter = 10
+max_piter = 10
 
 #Pre-define variables
-incrnorm = 1; gtol = alfa*0.0001;  r = 1.0e4;
+incrnorm = 1; gtol = alfa*0.00001; #alfa*0.0001;  r = 1.0e4;
 n = FacetNormal(mesh)
 
 def A(z):
@@ -101,7 +105,7 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
      - reno*outer(U,U) \
      - alpha_1*q*grad(U).T), v2)*dx(mesh) \
      + 0.001*alpha_1*h*inner(dot(U,grad(W)), dot(U,grad(v2)))*dx(mesh)
-     
+     #0.001
   # + abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W),v2('+'))*dS(mesh)
 
    print('solving for stress')
@@ -171,10 +175,13 @@ vtkfile_navierstokes_P << project(Analytic_pressure,Q)
 vtkfile_navierstokes_P << project(Analytic_pressure-P,Q)
 vtkfile_navierstokes_P << project(-2-grad(q)[0],Q)
 vtkfile_navierstokes_P << project(Analytic_Dq_1[1]-grad(q)[1],Q)
+vtkfile_navierstokes_P << project(W,V2)
+vtkfile_navierstokes_P << project(WINFLOW,V2)
+vtkfile_navierstokes_P << project(W-WINFLOW,V)
 
 print('delta pnorm: ', norm( project(P-Analytic_pressure,Q), norm_type='L2'))
-print('delta Qgradnorm: ', norm( project(grad(q)-Analytic_Dq_1,V2), norm_type='L2'))
-
+print('delta Qgradnorm: ', norm( project(grad(q)-Analytic_Dq_1,V), norm_type='L2'))
+print('delta Wnorm: ', norm( project(W-WINFLOW,V), norm_type='L2'))
 
 
 

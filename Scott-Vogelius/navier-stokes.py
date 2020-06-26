@@ -5,27 +5,31 @@ import math,sys
 from scipy.io import loadmat, savemat
 set_log_active(False)
 
-pdeg = 4  #6
+pdeg = 4 #6
 fudg = 10000
+print('Pdeg: ', pdeg )
 
-reno = 2.
+reno = float(sys.argv[1])
 
 
 lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5 #0.5
+upright = 0.5
 right = 1.
 
 mesh = Mesh("mesh.xml")
 dim = mesh.geometric_dimension()
+print('Diensions: ',dim)
 
 vtkfile_navierstokes_U = File('results/unst.pvd')
 vtkfile_navierstokes_P = File('results/pnst.pvd')
 vtkfile_navierstokes_dU = File('results/dunst.pvd')
 
-V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
+vtkfile_stokes_Uxml = File('nst.xml')
+
+V = VectorFunctionSpace(mesh, "CG", pdeg)
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
 
 # define boundary condition
@@ -48,19 +52,20 @@ bc = DirichletBC(V, boundary_exp, "on_boundary")
 bcz = DirichletBC(V, zf, "on_boundary")
 
 # set the parameters
-r = 1.0e4
+r = 1.0e5
 
 #
-uold = Function(V)
-uold.vector()[:] = 0.0
-
+uold = Function(V,'ust.xml')
 ust = Function(V)
-uvec_old = loadmat('ust')['uvec']
-ust.vector().set_local(uvec_old[:,0])
-uold.vector().axpy(1, ust.vector())
+ust.vector()[:] = uold.vector()[:]
+if False: # ONLY FOR SINGLE SEQUENTIAL
+    uold.vector()[:] = 0.0
+    uvec_old = loadmat('ust')['uvec']
+    ust.vector().set_local(uvec_old[:,0])
+    uold.vector().axpy(1, ust.vector())
 
-kters = 0; max_kters = 9; unorm = 1
-while kters < max_kters and unorm > 1e-6:
+kters = 0; max_kters = 10; unorm = 1
+while kters < max_kters and unorm > 1e-10:
     
     u = TrialFunction(V)
     v = TestFunction(V)
@@ -129,12 +134,17 @@ nst = Function(V)
 # nst is the Navier-Stokes solution
 nst.vector().axpy(1.0, uz.vector())
 
-uvec = uz.vector()[:].reshape(len(uz.vector()),1)
-savemat('nst', { 'uvec': uvec }, oned_as='column')
+
+if False:
+    uvec = uz.vector()[:].reshape(len(uz.vector()),1)
+    savemat('nst', { 'uvec': uvec }, oned_as='column')
 
 vtkfile_navierstokes_U << project(nst,V)
 vtkfile_navierstokes_P << project(-div(w)/reno,Q)
-nst.vector().axpy(-1,ust.vector())
+nst.vector().axpy(-1, ust.vector())
 vtkfile_navierstokes_dU << project(nst,V)
+
+
+vtkfile_stokes_Uxml << project(uz,V)
 
 

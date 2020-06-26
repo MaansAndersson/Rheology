@@ -9,6 +9,8 @@ set_log_active(False)
 
 mesh = Mesh("mesh.xml")
 dim = mesh.geometric_dimension()
+print(dim)
+
 cell = mesh.ufl_cell()
 
 pdeg = 4
@@ -29,7 +31,7 @@ h = CellDiameter(mesh)
 
 vtkfile_stokes_U = File('results/ust.pvd')
 vtkfile_stokes_P = File('results/pst.pvd')
-#vtkfile_stokes_Uxml = File('ust.xml')
+vtkfile_stokes_Uxml = File('ust.xml')
 #vtkfile_stokes_Pxml = File('pst.xml')
 
 
@@ -52,7 +54,7 @@ else :
 bc = DirichletBC(V, boundary_exp, "on_boundary")
 
 # set the parameters
-r = 1.0e4
+r = 1.0e5
 
 # define test and trial functions, and function that is updated
 uold = TrialFunction(V)
@@ -86,7 +88,7 @@ while iters < max_iters and div_u_norm > 1e-10:
     print('Apply BC time: ', end - start)
     
     start = timer()
-    solve(A, uold.vector(), b)
+    solve(A, uold.vector(), b) # 'bicgstab')
     end = timer()
     print('Linear solver time: ', end - start)
 
@@ -114,8 +116,9 @@ vtkfile_stokes_P << project(-div(w),Q)
 
 
 #Not MPI-safe.
-uvec = uold.vector()[:].reshape(len(uold.vector()),1)
-savemat('ust', { 'uvec': uvec }, oned_as='column')
+if False:
+    uvec = uold.vector()[:].reshape(len(uold.vector()),1)
+    savemat('ust', { 'uvec': uvec }, oned_as='column')
 
-#vtkfile_stokes_Uxml << project(uold,V)
+vtkfile_stokes_Uxml << project(uold,V)
 #vtkfile_stokes_Pxml << project(-div(w),Q)
