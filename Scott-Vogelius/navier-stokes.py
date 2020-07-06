@@ -29,7 +29,10 @@ vtkfile_navierstokes_dU = File('results/dunst.pvd')
 
 vtkfile_stokes_Uxml = File('nst.xml')
 
-V = VectorFunctionSpace(mesh, "CG", pdeg)
+V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
+B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
+V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
+#V = VectorFunctionSpace(mesh, "CG", pdeg)
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
 
 # define boundary condition
