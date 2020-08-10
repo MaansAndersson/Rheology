@@ -1,12 +1,13 @@
-
 from mshr import *
 from dolfin import *
 import math,sys
 import numpy as np
+from petsc4py import PETSc
 from scipy.io import loadmat, savemat
 from timeit import default_timer as timer
 
-set_log_active(False)
+#set_log_active(False)
+set_log_active(True)
 
 mesh = Mesh("mesh.xml")
 dim = mesh.geometric_dimension()
@@ -58,9 +59,15 @@ else :
 bc = DirichletBC(V, boundary_exp, "on_boundary")
 
 # set the parameters
-r = Constant(5.0e-1)
+r = Constant(1/10)
+rp = Constant(10.0)
+ro = Constant(1.e3)
+
+"""
+r = Constant(0.5)
 rp = Constant(2.0)
-ro = Constant(0)
+ro = Constant(1e3)
+"""
 # define test and trial functions, and function that is updated
 u = TrialFunction(V)
 v = TestFunction(V)
@@ -80,47 +87,46 @@ ust = Function(V)
 #solvers = LinearVariationalSolver(pdes)
 # Stokes solution
 # Scott-Vogelius iterated penalty method
-iters = 0; max_iters = 5; div_u_norm = 1
-while iters < max_iters and div_u_norm > 1e-10:
+iters = 0; max_iters = 1250; div_u_norm = 1
+while iters < max_iters and div_u_norm > 1e-5: #1e-10:
 # solve and update w
-
-    if False and np.mod(iters,5) == 0:
-        r = Constant(0)
-        rp = Constant(0)
-        ro = Constant(1.e5)
-    else:
-        r = Constant(5.0e-1)
-        rp = Constant(2.0)
+    
+    if False: # and np.mod(iters,5) == 0:
+        r = Constant(1/10)
+        rp = Constant(1.)
         ro = Constant(0)
-        
+
     start = timer()
     A = assemble(asf)
     b = assemble(bs)
     end = timer()
-    print('Assemble time: ', end - start)
+    if(MPI.rank(mesh.mpi_comm()) == 0):
+        print('Assemble time: ', end - start)
     
     start = timer()
     bc.apply(A)
     bc.apply(b)
     end = timer()
-    print('Apply BC time: ', end - start)
+    if(MPI.rank(mesh.mpi_comm()) == 0):
+        print('Apply BC time: ', end - start)
     
     start = timer()
-    
+    """
     ksp = PETSc.KSP().create()
     ksp.setType('gmres') #('cgs') #('gmres') #bcgs')
-    ksp.getPC().setType('sor') #('gamg') #('sor') #('jacobi') #('ilu')  #('asm') #('jacobi') #('icc')
+    #ksp.getPC().setType('asm') #('gamg') #('sor') #('jacobi') #('ilu')  #('asm') #('jacobi') #('icc')
     ksp.setOperators(as_backend_type(A).mat())
-    ksp.max_it = 100
+    ksp.max_it = 10000
     ksp.rtol = 1e-12
     ksp.setFromOptions()
     ksp.solve(as_backend_type(b).vec(), as_backend_type(uold.vector()).vec())
-    
-    solve(A, uold.vector(), b, 'gmres') #, 'gmres', 'amg')#, 'gmres') #,'amg')
+    """
+    solve(A, uold.vector(), b, 'gmres', 'amg') #'gmres', 'amg') #, 'gmres', 'amg')#, 'gmres') #,'amg')
     end = timer()
-    
-    print('Linear solver time: ', end - start)
-
+    if(MPI.rank(mesh.mpi_comm()) == 0):
+        print('Linear solver time: ', end - start)
+    #if(MPI.rank(mesh.mpi_comm()) == 0):                                                                                                                                                                    
+     #   print("iterations: %d residual norm: %g" % (ksp.its, ksp.norm))  
 
     
     #solvers.solve()
