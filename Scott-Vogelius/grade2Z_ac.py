@@ -3,9 +3,10 @@ from dolfin import *
 import math,sys
 from scipy.io import loadmat, savemat
 from ufl import nabla_div
+from timeit import default_timer as timer
 #set_log_active(False)
 
-pdeg = 4 
+pdeg = 4
 fudg = 10000*1000
 reno = float(sys.argv[1])
 alfa = float(sys.argv[2]) #0.01
@@ -13,8 +14,20 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 1. #.5 #0.5 #0.5
 right = 1.0 #0.5
+
+
+
+pipe = str(sys.argv[3])
+if pipe == 'pipe':
+    pipe = True
+else:
+    pipe = False
+    
+if pipe:
+    upright = 1. #.5 #0.5 #0.5
+else:
+    upright = 0.5
 
 alpha_1 = Constant(alfa)
 alpha_2 = Constant(-alfa)
@@ -25,13 +38,39 @@ print(dim)
 cell = mesh.ufl_cell()
 print("pdeg: ", pdeg)
 
-vtkfile_navierstokes_U = File('results/g2uW.pvd')
-vtkfile_navierstokes_P = File('results/g2pW.pvd')
-vtkfile_navierstokes_dU = File('results/grade2W-nse.pvd')
 
-V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
-Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
-V2 = VectorFunctionSpace(mesh, "CG", pdeg-1)
+Vp = VectorFunctionSpace(mesh, "Lagrange", pdeg)
+# Refine inlet and outlet
+for i in range(0,0):
+    cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
+    for cell in cells(mesh):
+      cell_markers[cell] = False
+      p = cell.midpoint()
+      if p.x() < -0.9 or p.x() > 3.9:
+          cell_markers[cell] = True
+    mesh = refine(mesh, cell_markers)
+print(len(mesh.cells()))
+
+
+
+vtkfile_U = File('results/g2u.pvd')
+vtkfile_P = File('results/g2p.pvd')
+vtkfile_W = File('results/g2W.pvd')
+vtkfile_dU = File('results/grade2W-nse.pvd')
+
+Bubble = False
+if Bubble:
+    # some demands on pdeg.
+    V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
+    B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
+    V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
+    V2 = VectorFunctionSpace(mesh, "CG", pdeg-3)
+    Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+else:
+    V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
+    Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+    Q1 = FunctionSpace(mesh, "Lagrange", pdeg)
+    V2 = VectorFunctionSpace(mesh, "CG", pdeg-1)
 
 
 def in_bdry(x):
@@ -56,27 +95,28 @@ bc = DirichletBC(V, boundary_exp, "on_boundary")
 bcW =  DirichletBC(V2, WINFLOW,  in_bdry) #, 'pointwise')
 
 # set the parameters
-r = Constant(0*1/2)
-rp = Constant(0*2)
-ro = Constant(1.e2)
+r = Constant(0*1/1.0)  # time-step artificial compressability
+rp = Constant(0*200.0) # step-length artificial compressability
+ro = Constant(1.e5)   # penelty in penelty iteration
 
 W = Function(V2)
-W_ = Function(V2)
+W_ = TrialFunction(V2)
 q = Function(Q)
 u = TrialFunction(V)
 v = TestFunction(V)
 v2 = TestFunction(V2)
 uold = Function(V)
 Uoldr = Function(V)
-U = Function(V,'nst.xml')
+U = project(Function(Vp,'nst.xml'),V)
+P = Function(Q)
 nst = Function(V)
 nst.vector()[:] = U.vector()[:]
+
 if False:
     uvec_old = loadmat('nst')['uvec']
     nst.vector().set_local(uvec_old[:,0])
     U.vector().axpy(1, nst.vector())
 #inintial guess
-#U.vector()[:] = 1 # Should be NSE.
 q.vector()[:] = 0
 
 
@@ -86,7 +126,7 @@ max_gg2_iter = 5
 max_piter = 50
 
 #Pre-define variables
-incrnorm = 1; gtol = 1e-9 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
+incrnorm = 1; gtol = alfa*1e-6 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
 n = FacetNormal(mesh)
 
 def A(z):
@@ -102,20 +142,21 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    gg2_iter += 1
    
    # FORMS FOR STRESS
-   rz =  inner(W \
+   rz =  inner(W_ \
      + alpha_1*dot(U, nabla_grad(W)) \
      - div(alpha_1*grad(U).T*A(U) \
      + (alpha_1 + alpha_2)*A(U)*A(U) \
      - reno*outer(U,U) \
      - alpha_1*q*grad(U).T), v2)*dx(mesh) \
-     #+ 0.001*alpha_1*h*inner(dot(U,grad(W)), dot(U,grad(v2)))*dx(mesh)
-     #0.001
-  # + abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W),v2('+'))*dS(mesh)
+     + 0.01*alpha_1*h*inner(dot(U,grad(W_)), dot(U,grad(v2)))*dx(mesh) \
+     #+ 1*abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W),v2('+'))*dS(mesh)
    aa = lhs(rz)
    bb = rhs(rz)
    print('solving for stress')
    
-   solve(rz == 0, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-12}}) #bcW
+   solve(aa == bb, W) #, bcW)
+   
+#   solve(rz == 0, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-12}}) #bcW
 
    # FORMS FOR IPM
    a_gg2 = inner(grad(u),grad(v))*dx + r*inner(u,v)*dx + ro*div(u)*div(v)*dx
@@ -130,24 +171,29 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    """
    
    # Solver IPM
-   pdegg2 = LinearVariationalProblem(a_gg2, F_gg2 + b_gg2, U, bc)
-   solvergg2 = LinearVariationalSolver(pdegg2)
+   #pdegg2 = LinearVariationalProblem(a_gg2, F_gg2 + b_gg2, U, bc)
+   #solvergg2 = LinearVariationalSolver(pdegg2)
 
 
    while (piter < max_piter and div_u_norm > 1.0E-10):
-       solvergg2.solve()
+       #solvergg2.solve()
+       start = timer()
+       Am, bm = assemble_system(a_gg2, F_gg2 + b_gg2, bc)
+       end = timer()
+       if(MPI.rank(mesh.mpi_comm()) == 0):
+           print('      Assemble time: ', end - start)
+           
+       start = timer()
+       solve(Am, U.vector(), bm, 'lu')
+       end = timer()
+       if(MPI.rank(mesh.mpi_comm()) == 0):
+           print('      Linear solver time: ', end - start)
+           
        wgg2.vector().axpy(rp+ro, U.vector())
+       
        # Criteria for stopping
-
        div_u_norm = sqrt(assemble(div(U)*div(U)*dx(mesh)))
        piter += 1
-       
-       #Uoldr.vector().axpy(-1, U.vector())
-       #incrnorm = norm(Uoldr,'H1')
-       #incrnorm /= norm(U,'H1')
-       
-       #Uoldr.vector()[:] = 0
-       #Uoldr.vector().axpy(1, U.vector())
        incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=0)/norm(U,norm_type='H1')
        if(MPI.rank(mesh.mpi_comm()) == 0):
             print("div(u) ",piter , div_u_norm)
@@ -156,8 +202,7 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    if(MPI.rank(mesh.mpi_comm()) == 0):
        print( "   IPM iter_no=",piter,"div_u_norm="," %.2e"%div_u_norm)
        print( gg2_iter,"change="," %.3e"%incrnorm)
-   #print(errornorm(SIGMA,sigma0,norm_type='H1',degree_rise=2)/norm(SIGMA,norm_type='H1'))
-   
+
 
    Uoldr = Function(V)
    Uoldr.vector().axpy(1, U.vector())
@@ -166,36 +211,34 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    G2D.vector().axpy(1, U.vector())
     #assign(G2D,U)
 
-   vtkfile_navierstokes_U << project(U,V)
-   #vtkfile_navierstokes_P << q
-   #vtkfile_navierstokes_P << project(W,V)
-   #G2D.vector().axpy(-1, nst.vector())
-   #vtkfile_GENERAL_GRADE2 << project(G2D,V)
-   #vtkfile_GENERAL_GRADE2 << project(q,Q)
+   vtkfile_U << project(U,V)
 
-#Enorm = norm(goldr.vector().axpy(-1, Uoldr.vector()),norm_type='H1')
-#print(Enorm)
-Analytic_pressure = Expression(( "-2*((x[0]-1.5)) + (2*a1+a2)*(4*x[1]*x[1])"), degree=pdeg, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
 
-Analytic_Dq_1 = Expression(("-2", "2*(2*a1+a2)*(4*x[1]) - a1*4*x[1]"), degree=pdeg, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
+# For a 2D pipe
+Analytic_pressure = Expression(( "-2*((x[0]-1.5)) + (2*a1+a2)*(4*x[1]*x[1])"), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
+
+Analytic_Dq_1 = Expression(("-2", "2*(2*a1+a2)*(4*x[1]) - a1*4*x[1]"), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
 
 
 
-P = project(q + alpha_1*dot(U,grad(q)),Q)
-vtkfile_navierstokes_P << P
-vtkfile_navierstokes_P << project(Analytic_pressure,Q)
-vtkfile_navierstokes_P << project(Analytic_pressure-P,Q)
-vtkfile_navierstokes_P << project(-2-grad(q)[0],Q)
-vtkfile_navierstokes_P << project(Analytic_Dq_1[1]-grad(q)[1],Q)
-vtkfile_navierstokes_P << project(W,V2)
-vtkfile_navierstokes_P << project(WINFLOW,V2)
-vtkfile_navierstokes_P << project(W-WINFLOW,V)
+assign(P,project(q + alpha_1*dot(U,grad(q)),Q))
+vtkfile_P << P
+assign(P,q)
+vtkfile_P << P
+if pipe:
+    vtkfile_P << project(Analytic_pressure,Q1)
+    vtkfile_P << project(project(Analytic_pressure,Q1)-P,Q)
+    vtkfile_P << project(-2-grad(q)[0],Q)
+    vtkfile_P << project(Analytic_Dq_1[1]-grad(q)[1],Q)
+vtkfile_W << project(W,V2)
+if pipe:
+    vtkfile_W << project(WINFLOW,V2)
+    vtkfile_W << project(W-WINFLOW,V)
+    print('delta Qgradnorm: ',errornorm(Analytic_Dq_1, project(grad(q),V), norm_type='L2'))
+    print('delta Wnorm: ', errornorm(WINFLOW,W, norm_type='L2'))
 
-print('delta pnorm: ', norm( project(P-Analytic_pressure,Q), norm_type='L2'))
-print('delta Qgradnorm: ', norm( project(grad(q)-Analytic_Dq_1,V), norm_type='L2'))
-print('delta Wnorm: ', norm( project(W-WINFLOW,V), norm_type='L2'))
 
 
 
 U.vector().axpy(-1,nst.vector())
-vtkfile_navierstokes_dU << project(U,V)
+vtkfile_dU << project(U,V)

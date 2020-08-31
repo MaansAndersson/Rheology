@@ -27,8 +27,19 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5
 right = 1.0
+
+
+pipe = str(sys.argv[1])
+if pipe == 'pipe':
+    pipe = True
+else:
+    pipe = False
+
+if pipe:
+    upright = 1. 
+else:
+    upright = 0.5
 
 h = CellDiameter(mesh)
 
@@ -37,12 +48,17 @@ vtkfile_stokes_P = File('results/pst.pvd')
 vtkfile_stokes_Uxml = File('ust.xml')
 #vtkfile_stokes_Pxml = File('pst.xml')
 
-#V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
-#B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
-#V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
-V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
+Bouble = False
+if Bouble:
+    # some demands on pdeg.
+    V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
+    B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
+    V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
 
-Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+else:
+    V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
+    Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+    V2 = VectorFunctionSpace(mesh, "CG", pdeg-1)
 
 # define boundary condition
 if dim == 2 :
@@ -59,15 +75,11 @@ else :
 bc = DirichletBC(V, boundary_exp, "on_boundary")
 
 # set the parameters
-r = Constant(1/10)
-rp = Constant(10.0)
-ro = Constant(1.e3)
+r = Constant(0*1/10)  # time-step artificial compressability
+rp = Constant(0*10.0) # step-length artificial compressability
+ro = Constant(1.e5)   # penelty in penelty iteration 
 
-"""
-r = Constant(0.5)
-rp = Constant(2.0)
-ro = Constant(1e3)
-"""
+
 # define test and trial functions, and function that is updated
 u = TrialFunction(V)
 v = TestFunction(V)
@@ -87,14 +99,11 @@ ust = Function(V)
 #solvers = LinearVariationalSolver(pdes)
 # Stokes solution
 # Scott-Vogelius iterated penalty method
-iters = 0; max_iters = 1250; div_u_norm = 1
-while iters < max_iters and div_u_norm > 1e-5: #1e-10:
+iters = 0; max_iters = 5; div_u_norm = 1
+while iters < max_iters and div_u_norm > 1e-10:
 # solve and update w
     
-    if False: # and np.mod(iters,5) == 0:
-        r = Constant(1/10)
-        rp = Constant(1.)
-        ro = Constant(0)
+
 
     start = timer()
     A = assemble(asf)
@@ -121,7 +130,7 @@ while iters < max_iters and div_u_norm > 1e-5: #1e-10:
     ksp.setFromOptions()
     ksp.solve(as_backend_type(b).vec(), as_backend_type(uold.vector()).vec())
     """
-    solve(A, uold.vector(), b, 'gmres', 'amg') #'gmres', 'amg') #, 'gmres', 'amg')#, 'gmres') #,'amg')
+    solve(A, uold.vector(), b, 'lu') #'gmres', 'amg') #, 'gmres', 'amg')#, 'gmres') #,'amg')
     end = timer()
     if(MPI.rank(mesh.mpi_comm()) == 0):
         print('Linear solver time: ', end - start)
@@ -155,5 +164,5 @@ if False:
     uvec = uold.vector()[:].reshape(len(uold.vector()),1)
     savemat('ust', { 'uvec': uvec }, oned_as='column')
 
-#vtkfile_stokes_Uxml << project(uold,V)
+vtkfile_stokes_Uxml << project(uold,V)
 #vtkfile_stokes_Pxml << project(-div(w),Q)

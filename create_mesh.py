@@ -192,7 +192,10 @@ if design == 'ClassicCrossed':
        mesh.coordinates()[:] = xy_hat_coor
        
         
-
+        
+if design == 'TEST' :
+    mesh = BoxMesh(Point(0, 0, 0), Point(1, 1, 1), 10, 10, 10)
+    
        
 
 

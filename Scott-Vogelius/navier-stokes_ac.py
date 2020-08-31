@@ -16,8 +16,20 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 1. #0.5
 right = 1.
+
+
+pipe = str(sys.argv[2])
+if pipe == 'pipe':
+    pipe = True
+else:
+    pipe = False
+    
+
+if pipe:
+    upright = 1. #.5 #0.5 #0.5
+else:
+    upright = 0.5
 
 mesh = Mesh("mesh.xml")
 dim = mesh.geometric_dimension()
@@ -29,11 +41,17 @@ vtkfile_navierstokes_dU = File('results/dunst.pvd')
 
 vtkfile_stokes_Uxml = File('nst.xml')
 
-#V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
-#B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
-#V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
-V = VectorFunctionSpace(mesh, "CG", pdeg)
-Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+Bouble = False
+if Bouble:
+    # some demands on pdeg.
+    V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
+    B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
+    V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
+
+else:
+    V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
+    Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+    
 
 # define boundary condition
 if dim == 2 :

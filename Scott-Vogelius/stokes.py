@@ -12,7 +12,7 @@ dim = mesh.geometric_dimension()
 
 cell = mesh.ufl_cell()
 
-pdeg = 2
+pdeg = 4
 print("pdeg: ", pdeg)
 fudg = 10000
 print('Diensions: ', dim)
@@ -25,7 +25,7 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5
+upright = 1.0 #0.5
 right = 1.0
 
 h = CellDiameter(mesh)
@@ -35,10 +35,10 @@ vtkfile_stokes_P = File('results/pst.pvd')
 vtkfile_stokes_Uxml = File('ust.xml')
 #vtkfile_stokes_Pxml = File('pst.xml')
 
-V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
-B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
-V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
-#V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
+#V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
+#B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
+#V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
+V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 
 Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
 
@@ -91,7 +91,7 @@ while iters < max_iters and div_u_norm > 1e-10:
     print('Apply BC time: ', end - start)
     
     start = timer()
-    solve(A, uold.vector(), b, 'gmres', 'amg')
+    solve(A, uold.vector(), b,'lu') #, 'gmres','amg')
     end = timer()
     print('Linear solver time: ', end - start)
 
