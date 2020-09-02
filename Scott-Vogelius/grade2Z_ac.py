@@ -39,20 +39,32 @@ cell = mesh.ufl_cell()
 print("pdeg: ", pdeg)
 
 
+
 Vp = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 # Refine inlet and outlet
-for i in range(0,0):
+for i in range(0,3):
     cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
     for cell in cells(mesh):
       cell_markers[cell] = False
       p = cell.midpoint()
-      if p.x() < -0.9 or p.x() > 3.9:
+      if abs(p.y()-0) > (0.5)-0.04 and (p.x()-1)>0:
           cell_markers[cell] = True
     mesh = refine(mesh, cell_markers)
+
+for i in range(0,2):
+    cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
+    for cell in cells(mesh):
+      cell_markers[cell] = False
+      p = cell.midpoint()
+      if (p.x()-1.0)**2 + (p.y()+0.5)**2 < 0.15*0.15 or (p.x()-1.0)**2 + (p.y()-0.5)**2 < 0.15*0.15:
+          cell_markers[cell] = True
+    mesh = refine(mesh, cell_markers)
+    
+
+    
 print(len(mesh.cells()))
-
-
-
+vtkfile_M = File('results/mesh.pvd')
+vtkfile_M << mesh
 vtkfile_U = File('results/g2u.pvd')
 vtkfile_P = File('results/g2p.pvd')
 vtkfile_W = File('results/g2W.pvd')
@@ -97,7 +109,7 @@ bcW =  DirichletBC(V2, WINFLOW,  in_bdry) #, 'pointwise')
 # set the parameters
 r = Constant(0*1/1.0)  # time-step artificial compressability
 rp = Constant(0*200.0) # step-length artificial compressability
-ro = Constant(1.e5)   # penelty in penelty iteration
+ro = Constant(1.e4)   # penelty in penelty iteration
 
 W = Function(V2)
 W_ = TrialFunction(V2)
@@ -123,10 +135,10 @@ q.vector()[:] = 0
 h = CellDiameter(mesh)
 gg2_iter = -1
 max_gg2_iter = 5
-max_piter = 50
+max_piter = 5
 
 #Pre-define variables
-incrnorm = 1; gtol = alfa*1e-6 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
+incrnorm = 1; gtol = alfa*1e-5 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
 n = FacetNormal(mesh)
 
 def A(z):
@@ -138,23 +150,26 @@ wgg2 = Function(V)
 while gg2_iter < max_gg2_iter and incrnorm > gtol:
    wgg2.vector()[:] = 0
 
-   piter = 0;  div_u_norm = 1
-   gg2_iter += 1
+   piter = 0;  div_u_norm = 1; gg2_iter += 1
    
    # FORMS FOR STRESS
    rz =  inner(W_ \
-     + alpha_1*dot(U, nabla_grad(W)) \
+     + alpha_1*dot(U, nabla_grad(W_)) \
      - div(alpha_1*grad(U).T*A(U) \
      + (alpha_1 + alpha_2)*A(U)*A(U) \
      - reno*outer(U,U) \
      - alpha_1*q*grad(U).T), v2)*dx(mesh) \
-     + 0.01*alpha_1*h*inner(dot(U,grad(W_)), dot(U,grad(v2)))*dx(mesh) \
-     #+ 1*abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W),v2('+'))*dS(mesh)
+     #+ Constant(.001)*alpha_1*h*inner(grad(W_), grad(v2))*dx(mesh) \
+     #+ Constant(0.1*0)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh) \
+     #+ Constant(0.0)*abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W_),v2('+'))*dS(mesh)
+     
+   rz += h*inner(W_ + alpha_1*dot(U, nabla_grad(W_)) - div(alpha_1*grad(U).T*A(U) + (alpha_1 + alpha_2)*A(U)*A(U) - reno*outer(U,U) - alpha_1*q*grad(U).T), \
+                 v2 + alpha_1*dot(U, nabla_grad(v2)) - div(alpha_1*grad(U).T*A(U) + (alpha_1 + alpha_2)*A(U)*A(U) - reno*outer(U,U) - alpha_1*q*grad(U).T))*dx
    aa = lhs(rz)
    bb = rhs(rz)
    print('solving for stress')
    
-   solve(aa == bb, W) #, bcW)
+   solve(aa == bb, W, bcW) #, bcW)
    
 #   solve(rz == 0, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-12}}) #bcW
 
@@ -213,7 +228,7 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
 
    vtkfile_U << project(U,V)
 
-
+    
 # For a 2D pipe
 Analytic_pressure = Expression(( "-2*((x[0]-1.5)) + (2*a1+a2)*(4*x[1]*x[1])"), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
 

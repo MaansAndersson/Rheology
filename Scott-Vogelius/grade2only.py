@@ -157,9 +157,9 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
        div_u_norm = sqrt(assemble(div(U)*div(U)*dx(mesh)))
        piter += 1
        
-       #Uoldr.vector().axpy(-1, U.vector())
-       #incrnorm = norm(Uoldr,'H1')
-       #incrnorm /= norm(U,'H1')
+       Uoldr.vector().axpy(-1, U.vector())
+       incrnorm = norm(Uoldr,'H1')
+       incrnorm /= norm(U,'H1')
        incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=0)/norm(U,norm_type='H1')
        if(MPI.rank(mesh.mpi_comm()) == 0):
             print("div(u) ",piter , div_u_norm)

@@ -6,15 +6,17 @@ from ufl import nabla_div
 set_log_active(False)
 
 mesh = Mesh("mesh.xml")
-mesh = (refine(mesh))
+mesh = refine(refine(refine(mesh)))
 dim = mesh.geometric_dimension()
 
 vtkfile_u = File('Ug2.pvd')
 vtkfile_p = File('Pg2.pvd')
 vtkfile_s = File('Sg2.pvd')
 
-alpha_1 = Constant(0.01)  #0.001
-alpha_2 = Constant(-0.01)  #-0.001
+
+alfa = 1.
+alpha_1 = Constant(alfa)  #0.001
+alpha_2 = Constant(-alfa)  #-0.001
 r = Constant(1.0) # Reynold's number
 # Samma
 
@@ -22,6 +24,7 @@ pdegV = 1
 pdegQ = 1
 
 V = VectorFunctionSpace(mesh, "Lagrange", pdegV)
+V2 = VectorFunctionSpace(mesh, "CG", pdegV)
 Q = FunctionSpace(mesh, "Lagrange", pdegQ)
 Z = FunctionSpace(mesh, "DG", pdegQ)
 
@@ -53,7 +56,7 @@ if dim == 3:
 else:
     uin = Expression(("exp(-1000*(-1-x[0])*(-1-x[0]))*(1.0-(x[1]*x[1]))","0"), degree = pdegV)
     u0 = Expression(("0","0"), degree = pdegV)
-    p0 = Expression("x[1]*x[1]",degree = pdegQ)
+    p0 = Expression("0",degree = pdegQ)
     wi = Expression(("0","-0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdegV)
 
 
@@ -76,7 +79,7 @@ bcs = [bcm2, bcm1] # bcc]
 
 # Functions
 u = Function(V)
-
+n = FacetNormal(mesh)
 p = Function(Q)
 p0 = Function(Q)
 sigma = Function(T)
@@ -90,6 +93,10 @@ tau = TestFunction(V)
 (v, q) = TestFunctions(W)
 U = Function(W)
 u0 = Function(W)
+
+u_out = Function(V)
+w_out = Function(V2)
+p_out = Function(Q)
 
 ust = Function(V)
 #uvec_old = loadmat('ust')['uvec']
@@ -134,7 +141,7 @@ for i in range(0,20):
 
     # Stabilization
     #rm += h*r*inner(grad(u)*u,grad(v)*u)*dx
-    rc += h*h*inner(grad(p_),grad(q))*dx #+ h*h*inner((p),(q))*dx
+    rc += h*h*inner(grad(p_),grad(q))*dx + h*h*inner((p),(q))*dx
     #rt += 0.01*alpha_1*h*inner(dot(u,nabla_grad(sigma)), dot(u,nabla_grad(tau)))*dx(mesh) \
     #      + 0.01*alpha_1*h*inner(nabla_grad(sigma),nabla_grad(tau))*dx(mesh)
 
@@ -165,8 +172,9 @@ for i in range(0,20):
     + (alpha_1 + alpha_2)*A(u)*A(u) \
     - r*outer(u,u) \
     - alpha_1*p*grad(u).T), tau)*dx(mesh) \
-    #+ 0.01*alpha_1*h*inner(dot(u,grad(w_)), dot(u,grad(tau)))*dx(mesh)
-    #+ 1*abs(alpha_1*dot(u('+'),n('+')))*conditional(dot(u('+'),n('+'))<0,1,0)*inner(jump(w_),v2('+'))*dS(mesh)
+    + Constant(0.01)*h*inner(grad(w_), grad(tau))*dx(mesh) \
+    + Constant(0.01)*alpha_1*h*inner(dot(u,nabla_grad(w_)), dot(u,nabla_grad(tau)))*dx(mesh)
+    #+ 1*abs(alpha_1*dot(u('+'),n('+')))*conditional(dot(u('+'),n('+'))<0,1,0)*inner(jump(w_),tau('+'))*dS(mesh)
     
     
     #assign(sigma0, sigma)
@@ -190,6 +198,9 @@ for i in range(0,20):
             print ("newton iteration: ", i, "Divergance: ", assemble(sqrt(div(u) * div(u))*dx)) #, " Rel change",
         break
     u, p = U.split()
-    vtkfile_u << project(u, V)#as_vector((w[0], w[1], w[2]))
-    vtkfile_p << project(p, Q)#w[3]
-    vtkfile_s << project(w, V) # project(sigma,T)#as_matrix([[w[4+a+b] for b in range(0, 3)] for a in range(0, 3)])
+assign(u_out, project(u, V))
+assign(w_out, project(w, V))
+assign(p_out, project(p, Q))
+vtkfile_u << u_out#as_vector((w[0], w[1], w[2]))
+vtkfile_p << p_out#w[3]
+vtkfile_s << w_out # project(sigma,T)#as_matrix([[w[4+a+b] for b in range(0, 3)] for a in range(0, 3)])

@@ -73,7 +73,7 @@ bc = DirichletBC(V, boundary_exp, "on_boundary")
 bcz = DirichletBC(V, zf, "on_boundary")
 
 # set the parameters
-r = 1.0e5
+r = 1.0e4
 
 #
 uold = Function(V,'ust.xml')
@@ -85,7 +85,7 @@ if False: # ONLY FOR SINGLE SEQUENTIAL
     ust.vector().set_local(uvec_old[:,0])
     uold.vector().axpy(1, ust.vector())
 
-kters = 0; max_kters = 10; unorm = 1
+kters = 0; max_kters = 5; unorm = 1
 while kters < max_kters and unorm > 1e-10:
     
     u = TrialFunction(V)
@@ -103,7 +103,7 @@ while kters < max_kters and unorm > 1e-10:
     solver = LinearVariationalSolver(pde)
     
     # Scott-Vogelius iterated penalty method
-    iters = 0; max_iters = 10; div_u_norm = 1
+    iters = 0; max_iters = 5; div_u_norm = 1
 
 #   iters = 0; max_iters = max(2,kters); div_u_norm = 1
     while iters < max_iters and div_u_norm > 1e-10:

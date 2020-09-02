@@ -3,7 +3,7 @@ from dolfin import *
 import math,sys
 from scipy.io import loadmat, savemat
 from ufl import nabla_div
-set_log_active(False)
+set_log_active(True)
 
 mesh = Mesh("mesh.xml")
 mesh = (refine(mesh))
@@ -65,7 +65,7 @@ bcw = DirichletBC(V, wi, InflowBoundary())
 bcm = [bcm2, bcm1]
 bc = bcc
 
-bcs = [bcm2, bcm1, bcc]
+bcs = [bcm2, bcm1] #, bcc]
 
 # TestFunctions
 # v = TestFunction(V)
@@ -125,10 +125,14 @@ while (t < T):
     #for i in range(0,20):
     # Constitutive equations
         w = alpha_1*(1/k*(A(u)-A(u0)) + A(um)*grad(um) + grad(um)*A(um)) + alpha_2*A(um)*A(um)
-        r = 1/re*inner(grad(um),grad(v))*dx + pm*div(v)*dx + inner(grad(um)*um,v)*dx + inner(div(w),v)*dx #- inner(div(sigma),v)*dx #+ inner(grad(u)*u,v)*dx
+        r = 1/r*inner(grad(um),grad(v))*dx + pm*div(v)*dx + inner(grad(um)*um,v)*dx + inner(div(w),v)*dx #- inner(div(sigma),v)*dx #+ inner(grad(u)*u,v)*dx
         r = -div(um)*q*dx
         #rc += h*h*inner(grad(pm),grad(q))*dx
         r += h*h*(inner(grad(pm) + grad(um)*um, grad(q) + grad(um)*v) + inner(div(um), div(v)))*dx
+        
+        if t<2*k:
+            r += h*inner(grad(u),grad(v))*dx
+        
         if(MPI.rank(mesh.mpi_comm()) == 0):
             print('solve ')
         solve(r == 0, U, bcs, solver_parameters={"newton_solver": {"relative_tolerance": 1e-12}})
