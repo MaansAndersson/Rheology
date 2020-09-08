@@ -5,7 +5,7 @@ import math,sys
 from scipy.io import loadmat, savemat
 from timeit import default_timer as timer
 
-set_log_active(False)
+set_log_active(True)
 
 mesh = Mesh("mesh.xml")
 dim = mesh.geometric_dimension()
@@ -57,7 +57,7 @@ else :
 bc = DirichletBC(V, boundary_exp, "on_boundary")
 
 # set the parameters
-r = 1.0e5
+r = 1.0e4
 
 # define test and trial functions, and function that is updated
 uold = TrialFunction(V)
@@ -91,7 +91,7 @@ while iters < max_iters and div_u_norm > 1e-10:
     print('Apply BC time: ', end - start)
     
     start = timer()
-    solve(A, uold.vector(), b,'lu') #, 'gmres','amg')
+    solve(A, uold.vector(), b, 'tfqmr') #, 'gmres','amg')
     end = timer()
     print('Linear solver time: ', end - start)
 

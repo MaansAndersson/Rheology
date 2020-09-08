@@ -51,10 +51,11 @@ vtkfile_stokes_Uxml = File('ust.xml')
 Bouble = False
 if Bouble:
     # some demands on pdeg.
-    V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
+    V1 = FiniteElement("Lagrange", mesh.ufl_cell(), 2)
     B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
     V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
-
+    Q = FunctionSpace(mesh, "CG", 1)
+    #Q = FunctionSpace(mesh, FiniteElement(NodalEnrichedElement(Q, B)))
 else:
     V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
     Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
@@ -75,9 +76,11 @@ else :
 bc = DirichletBC(V, boundary_exp, "on_boundary")
 
 # set the parameters
-r = Constant(0*1/10)  # time-step artificial compressability
-rp = Constant(0*10.0) # step-length artificial compressability
-ro = Constant(1.e5)   # penelty in penelty iteration 
+# set the parameters
+#print(mesh.min())
+r = Constant(1/2000.0)  # time-step artificial compressability
+rp = Constant(2000.0) # step-length artificial compressability
+ro = Constant(1E4)   # penelty in penelty iteration
 
 
 # define test and trial functions, and function that is updated
@@ -89,7 +92,7 @@ uold.vector()[:] = 0
 w = Function(V)
 w.vector()[:] = 0
 
-asf = inner(grad(u),grad(v))*dx + r*inner(u,v)*dx + ro*div(u)*div(v)*dx
+asf = inner(grad(u),grad(v))*dx + r*inner(u,v)*dx + ro*div(u)*div(v)*dx #+ h*h*div(u)*div(u)*div(v)*dx
 bs =  r*inner(uold,v)*dx - div(w)*div(v)*dx  #inner(grad(div(w)),v)*dx +
 
 
@@ -102,8 +105,6 @@ ust = Function(V)
 iters = 0; max_iters = 5; div_u_norm = 1
 while iters < max_iters and div_u_norm > 1e-10:
 # solve and update w
-    
-
 
     start = timer()
     A = assemble(asf)
@@ -123,14 +124,14 @@ while iters < max_iters and div_u_norm > 1e-10:
     """
     ksp = PETSc.KSP().create()
     ksp.setType('gmres') #('cgs') #('gmres') #bcgs')
-    #ksp.getPC().setType('asm') #('gamg') #('sor') #('jacobi') #('ilu')  #('asm') #('jacobi') #('icc')
+    ksp.getPC().setType('ilu') #('gamg') #('sor') #('jacobi') #('ilu')  #('asm') #('jacobi') #('icc')
     ksp.setOperators(as_backend_type(A).mat())
     ksp.max_it = 10000
     ksp.rtol = 1e-12
     ksp.setFromOptions()
     ksp.solve(as_backend_type(b).vec(), as_backend_type(uold.vector()).vec())
     """
-    solve(A, uold.vector(), b, 'lu') #'gmres', 'amg') #, 'gmres', 'amg')#, 'gmres') #,'amg')
+    solve(A, uold.vector(), b, 'lu')#, 'gmres', 'amg') #'sor') #'gmres', 'amg') #, 'gmres', 'amg')#, 'gmres') #,'amg')
     end = timer()
     if(MPI.rank(mesh.mpi_comm()) == 0):
         print('Linear solver time: ', end - start)
@@ -158,7 +159,7 @@ vtkfile_stokes_U << project(uold,V)
 vtkfile_stokes_P << project(-div(w),Q)
 
 
-
+#print(assemble((div(grad(uold)) - grad(-div(w)))*dx(mesh)))
 #Not MPI-safe.
 if False:
     uvec = uold.vector()[:].reshape(len(uold.vector()),1)

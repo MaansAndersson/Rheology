@@ -14,7 +14,7 @@ vtkfile_p = File('Pg2.pvd')
 vtkfile_s = File('Sg2.pvd')
 
 
-alfa = 1.
+alfa = 0.001
 alpha_1 = Constant(alfa)  #0.001
 alpha_2 = Constant(-alfa)  #-0.001
 r = Constant(1.0) # Reynold's number
@@ -63,7 +63,7 @@ else:
 bcm1 = DirichletBC(W.sub(0), uin, InflowBoundary())
 bcm2 = DirichletBC(W.sub(0), u0, NoSlipBoundary())
 bcc = DirichletBC(W.sub(1), p0, OutFlowBoundary())
-bcw = DirichletBC(V, wi, InflowBoundary())
+#bcw = DirichletBC(V, wi, InflowBoundary())
 
 bcm = [bcm2, bcm1]
 bc = bcc
@@ -121,6 +121,22 @@ def A(z):
 
 if True:
     um = u
+
+rm = inner(grad(u_),grad(v))*dx - p_*div(v)*dx
+rc = div(u_)*q*dx
+rc += h*h*inner(grad(p_),grad(q))*dx + h*h*inner((p),(q))*dx
+
+a = lhs(rm+rc)
+L = rhs(rm+rc)
+
+Am, b = assemble_system(a, L, bcs)
+solve(Am, U.vector(), b, 'lu')
+
+#solve(a == L, U, bcs)
+ust, pst = U.split()
+
+  
+    
 
 for i in range(0,20):
 # Constitutive equations
@@ -183,7 +199,7 @@ for i in range(0,20):
     #solve(rz == 0, w, bcw)
     aa = lhs(rz)
     bb = rhs(rz)
-    solve(aa == bb, w, bcw)
+    solve(aa == bb, w) #, bcw)
     
  
 
@@ -204,3 +220,8 @@ assign(p_out, project(p, Q))
 vtkfile_u << u_out#as_vector((w[0], w[1], w[2]))
 vtkfile_p << p_out#w[3]
 vtkfile_s << w_out # project(sigma,T)#as_matrix([[w[4+a+b] for b in range(0, 3)] for a in range(0, 3)])
+assign(u_out, project(u-ust, V))
+assign(p_out, project(p-pst, Q))
+vtkfile_u << u_out#as_vector((w[0], w[1], w[2]))
+vtkfile_p << p_out#w[3]
+vtkfile_s << w_out

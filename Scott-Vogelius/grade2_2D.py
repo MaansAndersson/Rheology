@@ -42,7 +42,7 @@ print("pdeg: ", pdeg)
 
 Vp = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 # Refine inlet and outlet
-for i in range(0,3):
+for i in range(0,0):
     cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
     for cell in cells(mesh):
       cell_markers[cell] = False
@@ -51,12 +51,12 @@ for i in range(0,3):
           cell_markers[cell] = True
     mesh = refine(mesh, cell_markers)
     
-for i in range(0,1):
+for i in range(0,0):
     cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
     for cell in cells(mesh):
       cell_markers[cell] = False
       p = cell.midpoint()
-      if abs(p.y()-0) > 0.49 and (p.x()-1)>:
+      if abs(p.y()-0) > 0.49 and (p.x()-1)>0:
           cell_markers[cell] = True
     mesh = refine(mesh, cell_markers)
 print(len(mesh.cells()))
@@ -120,7 +120,7 @@ U = project(Function(Vp,'ust.xml'),V)
 ust = Function(V)
 ust.vector()[:] = U.vector()[:]
 P = Function(Q)
-
+u_out = Function(V)
 v = TestFunction(V)
 
 
@@ -196,12 +196,16 @@ stominavstorm=errornorm(nst,ust,norm_type='H1')/goldnorm
 gold.vector().axpy(-1.0, nst.vector())
 #U.vector().axpy(-1,nst.vector())
 #gold.vector().axpy(-1.0, nst.vector())
-vtkfile_dU << project(gold,V)
-goldnstnorm=norm(gold,norm_type='H1')/goldnorm
+
+assign(u_out,project(gold,V))
+vtkfile_dU << u_out
+#goldnstnorm=norm(gold,norm_type='H1')/goldnorm
 
 
 #vtkfile_U << project(U,V)
 
+u = gold
+#vtkfile_W << project(div(alpha_1*(A(u)*grad(u) + grad(u)*A(u)) + alpha_2*A(u)*A(u) + alpha_1*(dot(u,nabla_grad(A(u))))),V)
 
 # For a 2D pipe
 Analytic_pressure = Expression(( "-2*((x[0]-1.5)) + (2*a1+a2)*(4*x[1]*x[1])"), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)

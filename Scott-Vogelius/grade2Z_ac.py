@@ -38,29 +38,38 @@ print(dim)
 cell = mesh.ufl_cell()
 print("pdeg: ", pdeg)
 
-
-
 Vp = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 # Refine inlet and outlet
-for i in range(0,3):
+for i in range(0,0):
     cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
     for cell in cells(mesh):
       cell_markers[cell] = False
       p = cell.midpoint()
-      if abs(p.y()-0) > (0.5)-0.04 and (p.x()-1)>0:
+      if (abs(p.y()-0) > (0.5)-0.04 and (p.x()-1)>0) or abs(p.y()-0) > 1-0.04:
           cell_markers[cell] = True
     mesh = refine(mesh, cell_markers)
 
-for i in range(0,2):
+for i in range(0,1): #3): #5):
     cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
+    radius  = 0.2 #-0.01*(i)
     for cell in cells(mesh):
       cell_markers[cell] = False
       p = cell.midpoint()
-      if (p.x()-1.0)**2 + (p.y()+0.5)**2 < 0.15*0.15 or (p.x()-1.0)**2 + (p.y()-0.5)**2 < 0.15*0.15:
+      if (p.x()-1.0)**2 + (p.y()+0.65)**2 < radius**2 or (p.x()-1.0)**2 + (p.y()-0.65)**2 < radius**2:
           cell_markers[cell] = True
     mesh = refine(mesh, cell_markers)
     
-
+for i in range(0,1): #5):
+    cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
+    radius  = 0.2 #-0.01*(i)
+    for cell in cells(mesh):
+      cell_markers[cell] = False
+      p = cell.midpoint()
+      if (p.x()-0.0)**2 + (p.y()+1.05)**2 < radius**2 or (p.x()-0)**2 + (p.y()-1.05)**2 < radius**2:
+          cell_markers[cell] = True
+    mesh = refine(mesh, cell_markers)
+    
+#mesh = refine(mesh)
     
 print(len(mesh.cells()))
 vtkfile_M = File('results/mesh.pvd')
@@ -73,10 +82,11 @@ vtkfile_dU = File('results/grade2W-nse.pvd')
 Bubble = False
 if Bubble:
     # some demands on pdeg.
-    V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
+    pdeg = 2
+    V1 = FiniteElement("CG", mesh.ufl_cell(), pdeg)
     B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
     V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
-    V2 = VectorFunctionSpace(mesh, "CG", pdeg-3)
+    V2 = VectorFunctionSpace(mesh, "CG", pdeg-1) #FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B))) #
     Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
 else:
     V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
@@ -95,6 +105,7 @@ if dim == 2 :
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
                        
     WINFLOW = Expression(("0","0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
+    WOUTFLOW = Expression(("0","0.5*8*(x[1]/2)*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
 
 
 else :
@@ -107,9 +118,9 @@ bc = DirichletBC(V, boundary_exp, "on_boundary")
 bcW =  DirichletBC(V2, WINFLOW,  in_bdry) #, 'pointwise')
 
 # set the parameters
-r = Constant(0*1/1.0)  # time-step artificial compressability
-rp = Constant(0*200.0) # step-length artificial compressability
-ro = Constant(1.e4)   # penelty in penelty iteration
+r = Constant(0*1/20)  # time-step artificial compressability
+rp = Constant(0*2.0) # step-length artificial compressability
+ro = Constant(1.e6)   # penelty in penelty iteration
 
 W = Function(V2)
 W_ = TrialFunction(V2)
@@ -134,8 +145,9 @@ q.vector()[:] = 0
 
 h = CellDiameter(mesh)
 gg2_iter = -1
-max_gg2_iter = 5
+max_gg2_iter = 6
 max_piter = 5
+
 
 #Pre-define variables
 incrnorm = 1; gtol = alfa*1e-5 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
@@ -154,22 +166,38 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    
    # FORMS FOR STRESS
    rz =  inner(W_ \
-     + alpha_1*dot(U, nabla_grad(W_)) \
+     + Constant(0.5)*alpha_1*dot(U, nabla_grad(W_)) \
      - div(alpha_1*grad(U).T*A(U) \
      + (alpha_1 + alpha_2)*A(U)*A(U) \
      - reno*outer(U,U) \
      - alpha_1*q*grad(U).T), v2)*dx(mesh) \
-     #+ Constant(.001)*alpha_1*h*inner(grad(W_), grad(v2))*dx(mesh) \
-     #+ Constant(0.1*0)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh) \
-     #+ Constant(0.0)*abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W_),v2('+'))*dS(mesh)
+     + Constant(0.0)*alpha_1*h*inner(grad(W_), grad(v2))*dx(mesh) \
+     + Constant(0.0)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh) \
+     + Constant(0.0)*abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W_),v2('+'))*dS(mesh) \
+     - Constant(0.5)*alpha_1*inner(dot(U, nabla_grad(v2)),W_)*dx
      
-   rz += h*inner(W_ + alpha_1*dot(U, nabla_grad(W_)) - div(alpha_1*grad(U).T*A(U) + (alpha_1 + alpha_2)*A(U)*A(U) - reno*outer(U,U) - alpha_1*q*grad(U).T), \
-                 v2 + alpha_1*dot(U, nabla_grad(v2)) - div(alpha_1*grad(U).T*A(U) + (alpha_1 + alpha_2)*A(U)*A(U) - reno*outer(U,U) - alpha_1*q*grad(U).T))*dx
+   rz += Constant(0.0)*h*inner(W_ + alpha_1*dot(U, nabla_grad(W_)) \
+                                    - div(alpha_1*grad(U).T*A(U)   \
+                                    + (alpha_1 + alpha_2)*A(U)*A(U)\
+                                    - reno*outer(U,U) \
+                                    - alpha_1*q*grad(U).T), \
+                                v2 + alpha_1*dot(U, nabla_grad(v2)) \
+                                    - div(alpha_1*grad(U).T*A(U) \
+                                    + (alpha_1 + alpha_2)*A(U)*A(U) \
+                                    - reno*outer(U,U) \
+                                    - alpha_1*q*grad(U).T))*dx
+                                    
+   rz += Constant(10*0.1)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh)
+   rz += Constant(10*0.1)*alpha_1*h*inner(dot(W_,nabla_grad(U)), dot(v2,nabla_grad(U)))*dx(mesh)
+   
+   
+   
    aa = lhs(rz)
    bb = rhs(rz)
+   Aa, Bb = assemble_system(aa, bb, bcW)
    print('solving for stress')
    
-   solve(aa == bb, W, bcW) #, bcW)
+   solve(Aa, W.vector(), Bb, 'lu') #, bcW)
    
 #   solve(rz == 0, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-12}}) #bcW
 
@@ -195,14 +223,14 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
        start = timer()
        Am, bm = assemble_system(a_gg2, F_gg2 + b_gg2, bc)
        end = timer()
-       if(MPI.rank(mesh.mpi_comm()) == 0):
-           print('      Assemble time: ', end - start)
+       #if(MPI.rank(mesh.mpi_comm()) == 0):
+       #    print('      Assemble time: ', end - start)
            
        start = timer()
        solve(Am, U.vector(), bm, 'lu')
        end = timer()
-       if(MPI.rank(mesh.mpi_comm()) == 0):
-           print('      Linear solver time: ', end - start)
+       #if(MPI.rank(mesh.mpi_comm()) == 0):
+       #    print('      Linear solver time: ', end - start)
            
        wgg2.vector().axpy(rp+ro, U.vector())
        
@@ -257,3 +285,4 @@ if pipe:
 
 U.vector().axpy(-1,nst.vector())
 vtkfile_dU << project(U,V)
+#vtkfile_dU << project(div(alpha_1*(A(u)*grad(u) + grad(u)*A(u)) + alpha_2*A(u)*A(u) alpha_1*(dot(u,nabla_grad(A(u))))
