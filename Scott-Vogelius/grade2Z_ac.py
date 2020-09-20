@@ -16,8 +16,7 @@ r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
 right = 1.0 #0.5
 
-
-
+q_base = 0
 pipe = str(sys.argv[3])
 if pipe == 'pipe':
     pipe = True
@@ -25,9 +24,14 @@ else:
     pipe = False
     
 if pipe:
-    upright = 1. #.5 #0.5 #0.5
+    upright = 1.
+    right = 1 #0.5 #0.5
 else:
     upright = 0.5
+    right = 1
+    
+L = (-lbufr + right + rbufr)
+
 
 alpha_1 = Constant(alfa)
 alpha_2 = Constant(-alfa)
@@ -49,7 +53,7 @@ for i in range(0,0):
           cell_markers[cell] = True
     mesh = refine(mesh, cell_markers)
 
-for i in range(0,1): #3): #5):
+for i in range(0,0): #3): #5):
     cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
     radius  = 0.2 #-0.01*(i)
     for cell in cells(mesh):
@@ -59,7 +63,7 @@ for i in range(0,1): #3): #5):
           cell_markers[cell] = True
     mesh = refine(mesh, cell_markers)
     
-for i in range(0,1): #5):
+for i in range(0,0): #5):
     cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
     radius  = 0.2 #-0.01*(i)
     for cell in cells(mesh):
@@ -86,17 +90,20 @@ if Bubble:
     V1 = FiniteElement("CG", mesh.ufl_cell(), pdeg)
     B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
     V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
-    V2 = VectorFunctionSpace(mesh, "CG", pdeg-1) #FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B))) #
+    V2 = VectorFunctionSpace(mesh, "CG", pdeg) #FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B))) #
     Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+    Q1 = FunctionSpace(mesh, "Lagrange", pdeg)
 else:
     V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
     Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
     Q1 = FunctionSpace(mesh, "Lagrange", pdeg)
-    V2 = VectorFunctionSpace(mesh, "CG", pdeg-1)
+    V2 = VectorFunctionSpace(mesh, "DG", pdeg)
 
 
 def in_bdry(x):
     return x[0] <= lbufr+DOLFIN_EPS
+def out_bdry(x):
+    return x[0] >= right + rbufr-DOLFIN_EPS
 
 # define boundary condition
 if dim == 2 :
@@ -104,9 +111,16 @@ if dim == 2 :
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
                        
-    WINFLOW = Expression(("0","0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
-    WOUTFLOW = Expression(("0","0.5*8*(x[1]/2)*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
-
+    if pipe:
+        WINFLOW = Expression(("0","r*4*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, r = reno, degree = pdeg)
+        WOUTFLOW = Expression(("0","r*4*(x[1])*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, r = reno, degree = pdeg)
+    else:
+        WINFLOW = Expression(("0","r*4*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, r = reno, degree = pdeg)
+        WOUTFLOW = Expression(("0","r*4*(x[1]/(up*up))*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, r = reno, up = upright, degree = pdeg)
+        
+    UINFLOW = Expression(("(1.0-x[1]*x[1])","0"),up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
+    Analytic_q = Expression(( "-2*(x[0]) + r*((2*a1+a2)*(4*x[1]*x[1]) + 2*a1*(1-x[1]*x[1])) - q_base" ), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr, r = reno, U = 1, L = L, q_base = q_base)
+    
 
 else :
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
@@ -115,12 +129,14 @@ else :
     
 
 bc = DirichletBC(V, boundary_exp, "on_boundary")
-bcW =  DirichletBC(V2, WINFLOW,  in_bdry) #, 'pointwise')
+bcW =  DirichletBC(V2, WINFLOW,  in_bdry, 'pointwise')
+bcW2 =  DirichletBC(V2, WINFLOW,  out_bdry) #, 'pointwise')
 
+#bcW = [bcW1, bcW2]
 # set the parameters
 r = Constant(0*1/20)  # time-step artificial compressability
 rp = Constant(0*2.0) # step-length artificial compressability
-ro = Constant(1.e6)   # penelty in penelty iteration
+ro = Constant(1.e4)   # penelty in penelty iteration
 
 W = Function(V2)
 W_ = TrialFunction(V2)
@@ -143,14 +159,15 @@ if False:
 q.vector()[:] = 0
 
 
+
 h = CellDiameter(mesh)
 gg2_iter = -1
-max_gg2_iter = 6
+max_gg2_iter = 15
 max_piter = 5
 
 
 #Pre-define variables
-incrnorm = 1; gtol = alfa*1e-5 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
+incrnorm = 1; gtol = 1e-5 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
 n = FacetNormal(mesh)
 
 def A(z):
@@ -165,18 +182,20 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    piter = 0;  div_u_norm = 1; gg2_iter += 1
    
    # FORMS FOR STRESS
-   rz =  inner(W_ \
-     + Constant(0.5)*alpha_1*dot(U, nabla_grad(W_)) \
+   
+   rz =  inner(1/reno*W_ \
+     + Constant(1)*alpha_1*dot(U, nabla_grad(W_)) \
      - div(alpha_1*grad(U).T*A(U) \
      + (alpha_1 + alpha_2)*A(U)*A(U) \
-     - reno*outer(U,U) \
-     - alpha_1*q*grad(U).T), v2)*dx(mesh) \
-     + Constant(0.0)*alpha_1*h*inner(grad(W_), grad(v2))*dx(mesh) \
-     + Constant(0.0)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh) \
-     + Constant(0.0)*abs(alpha_1*dot(U('+'),n('+')))*conditional(dot(U('+'),n('+'))<0,1,0)*inner(jump(W_),v2('+'))*dS(mesh) \
-     - Constant(0.5)*alpha_1*inner(dot(U, nabla_grad(v2)),W_)*dx
+     - outer(U,U) \
+     - alpha_1*grad(U).T*q), v2)*dx(mesh) \
+     - Constant(0)*inner(dot(U,nabla_grad(U)),v2)*dx(mesh) \
+     + Constant(0)*alpha_1*h*inner(grad(W_), grad(v2))*dx(mesh) \
+     + Constant(0)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh) \
+     + Constant(0)*abs(alpha_1*dot(U('-'),n('-')))*conditional(dot(U('-'),n('-'))<0,1,0)*inner(jump(W_),v2('+'))*dS(mesh) \
+     - Constant(0)*alpha_1*inner(dot(U, nabla_grad(v2)),W_)*dx
      
-   rz += Constant(0.0)*h*inner(W_ + alpha_1*dot(U, nabla_grad(W_)) \
+   rz += Constant(0)*h*inner(W_ + alpha_1*dot(U, nabla_grad(W_)) \
                                     - div(alpha_1*grad(U).T*A(U)   \
                                     + (alpha_1 + alpha_2)*A(U)*A(U)\
                                     - reno*outer(U,U) \
@@ -186,18 +205,25 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
                                     + (alpha_1 + alpha_2)*A(U)*A(U) \
                                     - reno*outer(U,U) \
                                     - alpha_1*q*grad(U).T))*dx
-                                    
-   rz += Constant(10*0.1)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh)
-   rz += Constant(10*0.1)*alpha_1*h*inner(dot(W_,nabla_grad(U)), dot(v2,nabla_grad(U)))*dx(mesh)
    
-   
+   """
+   rz =  inner(1/reno*W_ \
+     + alpha_1*dot(U, nabla_grad(W_))\
+     - div(alpha_1*grad(U).T*A(U) \
+     + (alpha_1 + alpha_2)*A(U)*A(U)), v2)*dx(mesh) \
+     + inner(dot(U,nabla_grad(U)),v2)*dx(mesh) \
+     + inner(alpha_1*grad(U).T*grad(q),v2)*dx(mesh) \
+     + Constant(0.0)*alpha_1*h*inner(grad(W_), grad(v2))*dx(mesh) \
+   #rz += Constant(10*0.1)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh)
+   #rz += Constant(10*0.1)*alpha_1*h*inner(dot(W_,nabla_grad(U)), dot(v2,nabla_grad(U)))*dx(mesh)
+   """
    
    aa = lhs(rz)
    bb = rhs(rz)
    Aa, Bb = assemble_system(aa, bb, bcW)
    print('solving for stress')
    
-   solve(Aa, W.vector(), Bb, 'lu') #, bcW)
+   solve(Aa, W.vector(), Bb, 'lu')
    
 #   solve(rz == 0, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-12}}) #bcW
 
@@ -258,27 +284,39 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
 
     
 # For a 2D pipe
-Analytic_pressure = Expression(( "-2*((x[0]-1.5)) + (2*a1+a2)*(4*x[1]*x[1])"), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
+#Analytic_pressure = Expression(( "-2*((x[0]-1.5)) + (2*a1+a2)*(4*x[1]*x[1])"), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
+#pressure_constant = (- 1 * (lbufr + rbufr + right)**2 + 1/(3*reno)*(3*alpha_1 + alpha_2)*1**2*(lbufr + rbufr + right))
 
-Analytic_Dq_1 = Expression(("-2", "2*(2*a1+a2)*(4*x[1]) - a1*4*x[1]"), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr)
+Analytic_Dq_1 = Expression(("-2", "r*2*(2*a1+a2)*(4*x[1]) - r*a1*4*x[1]"), degree=pdeg+1, a1=alpha_1, a2=alpha_2, r=reno, lb = lbufr, rb = rbufr)
 
 
 
-assign(P,project(q + alpha_1*dot(U,grad(q)),Q))
-vtkfile_P << P
+#assign(P,project(q + alpha_1*dot(U,grad(q)),Q))
+#vtkfile_P << P
 assign(P,q)
 vtkfile_P << P
 if pipe:
-    vtkfile_P << project(Analytic_pressure,Q1)
-    vtkfile_P << project(project(Analytic_pressure,Q1)-P,Q)
-    vtkfile_P << project(-2-grad(q)[0],Q)
-    vtkfile_P << project(Analytic_Dq_1[1]-grad(q)[1],Q)
+    print('int_omega q = ', assemble(q*dx(mesh)) )
+    
+
+    q_base = assemble(Analytic_q/10*dx(mesh))
+    print("q zero:", q_base)
+    Analytic_q.q_base = q_base
+    vtkfile_P << project(Analytic_q,Q1)
+    vtkfile_P << project(q-Analytic_q,Q1)
+    #vtkfile_P << project(project(Analytic_pressure,Q1)-P,Q)
+    #vtkfile_P << project(-2-grad(q)[0],Q)
+    #vtkfile_P << project(Analytic_Dq_1[1]-grad(q)[1],Q)
+    
 vtkfile_W << project(W,V2)
 if pipe:
     vtkfile_W << project(WINFLOW,V2)
     vtkfile_W << project(W-WINFLOW,V)
     print('delta Qgradnorm: ',errornorm(Analytic_Dq_1, project(grad(q),V), norm_type='L2'))
     print('delta Wnorm: ', errornorm(WINFLOW,W, norm_type='L2'))
+    print('delta Unorm: ', errornorm(UINFLOW,U, norm_type='H1'))
+    print('delta Qnorm: ', errornorm(Analytic_q,q, norm_type='L2'))
+
 
 
 

@@ -78,8 +78,8 @@ bc = DirichletBC(V, boundary_exp, "on_boundary")
 # set the parameters
 # set the parameters
 #print(mesh.min())
-r = Constant(1/2000.0)  # time-step artificial compressability
-rp = Constant(2000.0) # step-length artificial compressability
+r = Constant(0*1/2000.0)  # time-step artificial compressability
+rp = Constant(0*2000.0) # step-length artificial compressability
 ro = Constant(1E4)   # penelty in penelty iteration
 
 
