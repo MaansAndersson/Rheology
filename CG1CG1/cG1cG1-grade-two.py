@@ -182,7 +182,7 @@ for i in range(0,20):
     u, p = U.split()
     
     
-    rz =  inner(w_ \
+    rz =  inner(1/r*w_ \
     + alpha_1*dot(u, nabla_grad(w_)) \
     - div(alpha_1*grad(u).T*A(u) \
     + (alpha_1 + alpha_2)*A(u)*A(u) \
