@@ -3,7 +3,7 @@ from dolfin import *
 import math,sys
 from scipy.io import loadmat, savemat
 from ufl import nabla_div
-#set_log_active(False)
+set_log_active(False)
 
 pdeg = 4 
 fudg = 10000
@@ -13,13 +13,15 @@ lbufr = -1; #float(sys.argv[3])
 rbufr = 3; #float(sys.argv[4])
 r0 = 0.5; #float(sys.argv[4])
 r1 = 1; #float(sys.argv[4])
-upright = 0.5 #0.5 #0.5
+upright = 1.0 #0.5
 right = 1.0 #0.5
-
+L = (-lbufr + right + rbufr)
+q_base = 0
 alpha_1 = Constant(alfa)
 alpha_2 = Constant(-alfa)
 
 mesh = Mesh("mesh.xml")
+Vp = VectorFunctionSpace(mesh, "Lagrange", pdeg)
 dim = mesh.geometric_dimension()
 print(dim)
 
@@ -39,8 +41,9 @@ if dim == 2 :
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
                        
-    
-    WINFLOW = Expression(("0","0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg)
+    UINFLOW = Expression(("(1.0-x[1]*x[1])","0"),up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
+    Analytic_q = Expression(( "-2*(x[0]) + r*((2*a1+a2)*(4*x[1]*x[1]) + 2*a1*(1-x[1]*x[1])) - q_base" ), degree=pdeg+1, a1=alpha_1, a2=alpha_2, lb = lbufr, rb = rbufr, r = reno, U = 1, L = L, q_base = q_base)
+    WINFLOW = Expression(("0","r*0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdeg, r = reno)
 else :
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1]+x[2]*x[2])/(up*up)))","0","0"), \
@@ -57,7 +60,7 @@ r = 1.0e4
 
 
 sigma = Function(Ycg)
-#sigma = TrialFunction(Y)
+sigma_ = TrialFunction(Ycg)
 tau = TestFunction(Ycg)
 """tau_ = as_matrix(((tau[0], tau[1], tau[2]),
                   (tau[3], tau[4], tau[5]),
@@ -72,12 +75,9 @@ Uoldr = Function(V)
 U = Function(V)
 
 
-
-
-
-nst = Function(V)
-uvec_old = loadmat('nst')['uvec']
-nst.vector().set_local(uvec_old[:,0])
+nst = project(Function(Vp,'nst.xml'),V)
+#uvec_old = loadmat('nst')['uvec']
+#nst.vector().set_local(uvec_old[:,0])
 U.vector().axpy(1, nst.vector())
 #inintial guess
 #U.vector()[:] = 1 # Should be NSE.
@@ -114,11 +114,11 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
      #                   (sigma[6], sigma[7], sigma[8])) )
 
    # FORMS FOR STRESS
-   rz = inner(sigma\
-   + alpha_1*dot(U,    nabla_grad(sigma)) \
+   rz = inner(1/reno*sigma_\
+   + alpha_1*dot(U,    nabla_grad(sigma_)) \
    - (alpha_1*grad(U).T*A(U) \
    + (alpha_1 + alpha_2)*A(U)*A(U) \
-   - reno*outer(U,U) \
+   - outer(U,U) \
    - alpha_1*q*grad(U).T \
    + alpha_1*SIGMA*grad(U).T),tau)*dx(mesh) \
    #+ alpha_1*h*inner(dot(U,nabla_grad(sigma)), dot(U,nabla_grad(tau)))*dx(mesh)
@@ -126,12 +126,16 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    #+ inner(0.5*alpha_1*div(U)*sigma_,tau_)*dx(mesh) \
    #+ abs(alpha_1*dot(U('-'),n('-')))*conditional(dot(U('-'),n('-'))<0,1,0)*inner(jump(sigma_),tau_('+'))*dS(mesh)
 
-
-
+   aa = lhs(rz)
+   bb = rhs(rz)
+   Aa, Bb = assemble_system(aa, bb)
    print('solving for stress')
-   solve(rz == 0, sigma, solver_parameters={"newton_solver": {"relative_tolerance": 1e-11}})# bcY,
-   #sigma = Function(Y)
-   #solve(T_gg2 == N_gg2, sigma)
+   
+   solve(Aa, sigma.vector(), Bb, 'lu')
+
+   #print('solving for stress')
+   #solve(rz == 0, sigma, solver_parameters={"newton_solver": {"relative_tolerance": 1e-11}})# bcY,
+
    assign(SIGMA,sigma)
    
    """SIGMA_ = as_matrix( ((sigma[0], sigma[1], sigma[2]),
@@ -157,9 +161,7 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
        div_u_norm = sqrt(assemble(div(U)*div(U)*dx(mesh)))
        piter += 1
        
-       Uoldr.vector().axpy(-1, U.vector())
-       incrnorm = norm(Uoldr,'H1')
-       incrnorm /= norm(U,'H1')
+       #Uoldr.vector().axpy(-1, U.vector())
        incrnorm = errornorm(U,Uoldr,norm_type='H1',degree_rise=0)/norm(U,norm_type='H1')
        if(MPI.rank(mesh.mpi_comm()) == 0):
             print("div(u) ",piter , div_u_norm)
@@ -197,6 +199,10 @@ Analytic_Dq_1 = Expression(("-2", "2*(2*a1+a2)*(4*x[1]) - a1*4*x[1]"), degree=pd
 
 P = project(q + alpha_1*dot(U,grad(q)),Q)
 
+q_base = assemble(Analytic_q/10*dx(mesh))
+print("q zero:", q_base)
+Analytic_q.q_base = q_base
+
 vtkfile_navierstokes_P << P
 vtkfile_navierstokes_P << project(Analytic_pressure,Q)
 vtkfile_navierstokes_P << project(Analytic_pressure-P,Q)
@@ -209,6 +215,9 @@ vtkfile_navierstokes_P << project(div(sigma)-WINFLOW,V)
 print('delta pnorm: ', norm( project(P-Analytic_pressure,Q), norm_type='L2'))
 print('delta Qgradnorm: ', norm( project(grad(q)-Analytic_Dq_1,V), norm_type='L2'))
 print('delta Wnorm: ', norm( project(div(sigma)-WINFLOW,V), norm_type='L2'))
+print('delta Wnorm: ', errornorm(WINFLOW,project(div(sigma),V), norm_type='L2'))
+print('delta Unorm: ', errornorm(UINFLOW,U, norm_type='H1'))
+print('delta Qnorm: ', errornorm(Analytic_q,q, norm_type='L2'))
 
 
 
