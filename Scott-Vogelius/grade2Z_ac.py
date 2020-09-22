@@ -97,7 +97,7 @@ else:
     V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
     Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
     Q1 = FunctionSpace(mesh, "Lagrange", pdeg)
-    V2 = VectorFunctionSpace(mesh, "DG", pdeg)
+    V2 = VectorFunctionSpace(mesh, "CG", pdeg)
 
 
 def in_bdry(x):
