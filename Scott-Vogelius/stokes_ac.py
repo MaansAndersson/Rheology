@@ -10,7 +10,10 @@ from timeit import default_timer as timer
 set_log_active(True)
 
 mesh = Mesh("mesh.xml")
+#mesh = refine(mesh)
+
 dim = mesh.geometric_dimension()
+
 
 cell = mesh.ufl_cell()
 
@@ -41,6 +44,9 @@ if pipe:
 else:
     upright = 0.5
 
+#meshsize = 24
+#mesh = RectangleMesh(Point(lbufr, -1), Point(right+rbufr, 1), 3*meshsize, meshsize, 'right/left')
+
 h = CellDiameter(mesh)
 
 vtkfile_stokes_U = File('results/ust.pvd')
@@ -51,7 +57,8 @@ vtkfile_stokes_Uxml = File('ust.xml')
 Bouble = False
 if Bouble:
     # some demands on pdeg.
-    V1 = FiniteElement("Lagrange", mesh.ufl_cell(), 2)
+    pdeg = 2
+    V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
     B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
     V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
     Q = FunctionSpace(mesh, "CG", 1)
@@ -63,9 +70,12 @@ else:
 
 # define boundary condition
 if dim == 2 :
+    
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-x[1]*x[1]) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg)
+
+    
 else : 
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-(x[1]*x[1]+x[2]*x[2])) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1]+x[2]*x[2])/(up*up)))","0","0"), \
@@ -92,7 +102,7 @@ uold.vector()[:] = 0
 w = Function(V)
 w.vector()[:] = 0
 
-asf = inner(grad(u),grad(v))*dx + r*inner(u,v)*dx + ro*div(u)*div(v)*dx #+ h*h*div(u)*div(u)*div(v)*dx
+asf = inner(grad(u),grad(v))*dx + r*inner(u,v)*dx + ro*div(u)*div(v)*dx
 bs =  r*inner(uold,v)*dx - div(w)*div(v)*dx  #inner(grad(div(w)),v)*dx +
 
 
@@ -105,7 +115,7 @@ ust = Function(V)
 iters = 0; max_iters = 5; div_u_norm = 1
 while iters < max_iters and div_u_norm > 1e-10:
 # solve and update w
-
+    """
     start = timer()
     A = assemble(asf)
     b = assemble(bs)
@@ -119,19 +129,21 @@ while iters < max_iters and div_u_norm > 1e-10:
     end = timer()
     if(MPI.rank(mesh.mpi_comm()) == 0):
         print('Apply BC time: ', end - start)
-    
-    start = timer()
     """
+    A, b = assemble_system(asf, bs, bc) 
+
+    start = timer()
+    """ 
     ksp = PETSc.KSP().create()
-    ksp.setType('gmres') #('cgs') #('gmres') #bcgs')
-    ksp.getPC().setType('ilu') #('gamg') #('sor') #('jacobi') #('ilu')  #('asm') #('jacobi') #('icc')
+    #ksp.setType('cgs') #('cgs') #('gmres') #bcgs')
+    ksp.getPC().setType('lu') #('gamg') #('sor') #('jacobi') #('ilu')  #('asm') #('jacobi') #('icc')
     ksp.setOperators(as_backend_type(A).mat())
     ksp.max_it = 10000
     ksp.rtol = 1e-12
     ksp.setFromOptions()
     ksp.solve(as_backend_type(b).vec(), as_backend_type(uold.vector()).vec())
     """
-    solve(A, uold.vector(), b, 'lu')#, 'gmres', 'amg') #'sor') #'gmres', 'amg') #, 'gmres', 'amg')#, 'gmres') #,'amg')
+    solve(A, uold.vector(), b)#, 'gmres', 'amg') #'sor') #'gmres', 'amg') #, 'gmres', 'amg')#, 'gmres') #,'amg')
     end = timer()
     if(MPI.rank(mesh.mpi_comm()) == 0):
         print('Linear solver time: ', end - start)

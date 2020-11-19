@@ -36,7 +36,7 @@ L = (-lbufr + right + rbufr)
 alpha_1 = Constant(alfa)
 alpha_2 = Constant(-alfa)
 
-mesh = Mesh("mesh.xml")
+mesh = Mesh("mesh.xml") 
 dim = mesh.geometric_dimension()
 print(dim)
 cell = mesh.ufl_cell()
@@ -55,7 +55,7 @@ for i in range(0,0):
 
 for i in range(0,0): #3): #5):
     cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
-    radius  = 0.2 #-0.01*(i)
+    radius  = 0.5/(i+1) #-0.01*(i)
     for cell in cells(mesh):
       cell_markers[cell] = False
       p = cell.midpoint()
@@ -91,13 +91,16 @@ if Bubble:
     B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
     V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
     V2 = VectorFunctionSpace(mesh, "CG", pdeg) #FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B))) #
-    Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+    Q = FunctionSpace(mesh, "Lagrange", pdeg)
     Q1 = FunctionSpace(mesh, "Lagrange", pdeg)
 else:
-    V = VectorFunctionSpace(mesh, "Lagrange", pdeg)
-    Q = FunctionSpace(mesh, "Lagrange", pdeg-1)
+    V = VectorFunctionSpace(mesh, "Lagrange", 2+pdeg)
+    Q = FunctionSpace(mesh, "Lagrange", pdeg+2-1)
     Q1 = FunctionSpace(mesh, "Lagrange", pdeg)
-    V2 = VectorFunctionSpace(mesh, "CG", pdeg)
+    #V1 = FiniteElement("CG", mesh.ufl_cell(), pdeg)
+    V2 = VectorFunctionSpace(mesh, "CG", pdeg-3)
+    #B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
+    #V2 = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
 
 
 def in_bdry(x):
@@ -129,16 +132,17 @@ else :
     
 
 bc = DirichletBC(V, boundary_exp, "on_boundary")
-bcW =  DirichletBC(V2, WINFLOW,  in_bdry, 'pointwise')
+bcW1 = DirichletBC(V2, WINFLOW,  in_bdry, 'pointwise')
 bcW2 =  DirichletBC(V2, WINFLOW,  out_bdry) #, 'pointwise')
 
-#bcW = [bcW1, bcW2]
+bcW = [] # [bcW1] #[bcW1, bcW2]
 # set the parameters
 r = Constant(0*1/20)  # time-step artificial compressability
 rp = Constant(0*2.0) # step-length artificial compressability
 ro = Constant(1.e4)   # penelty in penelty iteration
 
 W = Function(V2)
+Wtemp = Function(V2)
 W_ = TrialFunction(V2)
 q = Function(Q)
 u = TrialFunction(V)
@@ -158,16 +162,17 @@ if False:
 #inintial guess
 q.vector()[:] = 0
 
-
+infl = Expression("x[0] <= lb", lb = lbufr, degree = pdeg)
 
 h = CellDiameter(mesh)
+hf = FacetArea(mesh)
 gg2_iter = -1
-max_gg2_iter = 15
-max_piter = 5
+max_gg2_iter = 5
+max_piter = 15
 
 
 #Pre-define variables
-incrnorm = 1; gtol = 1e-5 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
+incrnorm = 1; gtol = 5e-5 #alfa*0.0000001; #alfa*0.0001;  r = 1.0e4;
 n = FacetNormal(mesh)
 
 def A(z):
@@ -184,17 +189,20 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    # FORMS FOR STRESS
    
    rz =  inner(1/reno*W_ \
-     + Constant(1)*alpha_1*dot(U, nabla_grad(W_)) \
+     + Constant(1.0)*alpha_1*dot(U, nabla_grad(W_)) \
      - div(alpha_1*grad(U).T*A(U) \
      + (alpha_1 + alpha_2)*A(U)*A(U) \
      - outer(U,U) \
      - alpha_1*grad(U).T*q), v2)*dx(mesh) \
-     - Constant(0)*inner(dot(U,nabla_grad(U)),v2)*dx(mesh) \
-     + Constant(0)*alpha_1*h*inner(grad(W_), grad(v2))*dx(mesh) \
-     + Constant(0)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh) \
-     + Constant(0)*abs(alpha_1*dot(U('-'),n('-')))*conditional(dot(U('-'),n('-'))<0,1,0)*inner(jump(W_),v2('+'))*dS(mesh) \
-     - Constant(0)*alpha_1*inner(dot(U, nabla_grad(v2)),W_)*dx
-     
+     + Constant(0.0)*alpha_1*h*inner(grad(W_), grad(v2))*dx(mesh) \
+     + Constant(1)*alpha_1*h*inner(dot(U,nabla_grad(W_)), dot(U,nabla_grad(v2)))*dx(mesh) \
+     - Constant(0)*alpha_1*inner(dot(U, nabla_grad(v2)),W_)*dx \
+     + alpha_1*0.5*inner(div(U)*W,v2)*dx
+# + infl*Constant(0)/h*inner(W_-WINFLOW, v2)*ds(mesh) 
+#+ Constant(0)*abs(alpha_1*dot(U('-'),n('-')))*conditional(dot(U('-'),n('-'))<0,1,0)*inner(jump(W_),v2('+'))*dS(mesh) \
+
+
+
    rz += Constant(0)*h*inner(W_ + alpha_1*dot(U, nabla_grad(W_)) \
                                     - div(alpha_1*grad(U).T*A(U)   \
                                     + (alpha_1 + alpha_2)*A(U)*A(U)\
@@ -221,11 +229,21 @@ while gg2_iter < max_gg2_iter and incrnorm > gtol:
    aa = lhs(rz)
    bb = rhs(rz)
    Aa, Bb = assemble_system(aa, bb, bcW)
+   
+
    print('solving for stress')
    
    solve(Aa, W.vector(), Bb, 'lu')
    
-#   solve(rz == 0, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-12}}) #bcW
+   # If newtoniteartion
+   #for ijk in range(2):
+   #    J = derivative(rz, W_)
+   #    Aaa, Bbb = assemble_system(J, -rz, bcW)
+   #    solve(Aaa, Wtemp.vector(), Bbb, 'lu')
+   #    W.vector()[:] += Wtemp.vector()[:]
+
+
+#   solve(rz == -1, W, bcW, solver_parameters={"newton_solver": {"relative_tolerance": 1e-12}}) #bcW
 
    # FORMS FOR IPM
    a_gg2 = inner(grad(u),grad(v))*dx + r*inner(u,v)*dx + ro*div(u)*div(v)*dx

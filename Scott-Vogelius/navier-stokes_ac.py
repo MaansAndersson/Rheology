@@ -44,6 +44,7 @@ vtkfile_stokes_Uxml = File('nst.xml')
 Bouble = False
 if Bouble:
     # some demands on pdeg.
+    pdeg = 2
     V1 = FiniteElement("Lagrange", mesh.ufl_cell(), pdeg)
     B = FiniteElement("B", mesh.ufl_cell(), mesh.topology().dim() + 1)
     V = FunctionSpace(mesh, VectorElement(NodalEnrichedElement(V1, B)))
