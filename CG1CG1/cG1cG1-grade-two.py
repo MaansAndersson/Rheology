@@ -6,7 +6,9 @@ from ufl import nabla_div
 set_log_active(False)
 
 mesh = Mesh("mesh.xml")
-mesh = refine(refine(refine(mesh)))
+
+for i in range(4):
+    mesh = (refine(mesh)) # refine(refine(refine(refine(mesh))))
 dim = mesh.geometric_dimension()
 
 vtkfile_u = File('Ug2.pvd')
@@ -14,10 +16,10 @@ vtkfile_p = File('Pg2.pvd')
 vtkfile_s = File('Sg2.pvd')
 
 
-alfa = 0.001
+alfa = 0.01 
 alpha_1 = Constant(alfa)  #0.001
-alpha_2 = Constant(-alfa)  #-0.001
-r = Constant(1.0) # Reynold's number
+alpha_2 = Constant(-alfa)  
+r = Constant(1) # Reynold's number
 # Samma
 
 pdegV = 1
@@ -50,11 +52,25 @@ class OutFlowBoundary(SubDomain):
         return on_boundary and (x[0] > 4 - DOLFIN_EPS)
 
 if dim == 3:
-    uin = Expression(("(1.0-(x[1]*x[1]+x[2]*x[2]))","0","0"), degree = pdegV)
+    uin = Expression(("(1.0-(x[1]*x[1]+x[2]*x[2]))","0","0"), degree = pdegV+2)
+    boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-x[1]*x[1]) + \
+      (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
+                       up=upright,ri=right,fu=fudg,rb=rbufr,lb=lbufr,degree = pdeg+2)
+
     u0 = Expression(("0","0","0"), degree = pdegV)
     p0 = Expression("0",degree = pdegQ)
 else:
-    uin = Expression(("exp(-1000*(-1-x[0])*(-1-x[0]))*(1.0-(x[1]*x[1]))","0"), degree = pdegV)
+    lbufr = -1
+    rbufr = 3
+    upright = 0.5
+    right = 1
+
+    
+    uin = Expression(("exp(-1000*1000*(-1-x[0])*(-1-x[0]))*(1.0-(x[1]*x[1]))","0"), degree = pdegV)
+    boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-x[1]*x[1]) + \
+      (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
+                       up=upright,ri=right,fu=1000,rb=rbufr,lb=lbufr,degree = 2)
+
     u0 = Expression(("0","0"), degree = pdegV)
     p0 = Expression("0",degree = pdegQ)
     wi = Expression(("0","-0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdegV)
@@ -62,13 +78,16 @@ else:
 
 bcm1 = DirichletBC(W.sub(0), uin, InflowBoundary())
 bcm2 = DirichletBC(W.sub(0), u0, NoSlipBoundary())
+bcm3 = DirichletBC(W.sub(0), boundary_exp, 'on_boundary')
 bcc = DirichletBC(W.sub(1), p0, OutFlowBoundary())
 #bcw = DirichletBC(V, wi, InflowBoundary())
 
-bcm = [bcm2, bcm1]
+
+#bcm = [bcm2, bcm1]
 bc = bcc
 
-bcs = [bcm2, bcm1] # bcc]
+bcs = bcm3 #
+#bcs = [bcm2, bcm1, bcc]
 
 # TestFunctions
 # v = TestFunction(V)
@@ -99,6 +118,7 @@ w_out = Function(V2)
 p_out = Function(Q)
 
 ust = Function(V)
+pst = Function(Q)
 #uvec_old = loadmat('ust')['uvec']
 #ust.vector().set_local(uvec_old[:,0])
 #u.vector().axpy(1, ust.vector())
@@ -124,7 +144,10 @@ if True:
 
 rm = inner(grad(u_),grad(v))*dx - p_*div(v)*dx
 rc = div(u_)*q*dx
-rc += h*h*inner(grad(p_),grad(q))*dx + h*h*inner((p),(q))*dx
+rc += h*h*inner(grad(p_),grad(q))*dx + h*h*h*p_*q*dx
+rm += inner(ust,v)*dx
+rc += inner(pst,q)*dx
+
 
 a = lhs(rm+rc)
 L = rhs(rm+rc)
@@ -133,14 +156,16 @@ Am, b = assemble_system(a, L, bcs)
 solve(Am, U.vector(), b, 'lu')
 
 #solve(a == L, U, bcs)
-ust, pst = U.split()
+ust_, pst_ = U.split()
 
-  
-    
+assign(ust, ust_)
+assign(pst, pst_)
+assign(u_out, project(ust, V))
+vtkfile_u << u_out    
 
 for i in range(0,20):
 # Constitutive equations
-    rm = inner(grad(u_),grad(v))*dx - p_*div(v)*dx - inner(w,v)*dx #- inner(div(sigma),v)*dx #+ inner(grad(u)*u,v)*dx
+    rm = inner(grad(u_),grad(v))*dx(mesh) - p_*div(v)*dx(mesh) - inner(w,v)*dx #- inner(div(sigma),v)*dx #+ inner(grad(u)*u,v)*dx
     rc = div(u_)*q*dx
 
     """
@@ -156,10 +181,10 @@ for i in range(0,20):
 
 
     # Stabilization
-    #rm += h*r*inner(grad(u)*u,grad(v)*u)*dx
-    rc += h*h*inner(grad(p_),grad(q))*dx + h*h*inner((p),(q))*dx
-    #rt += 0.01*alpha_1*h*inner(dot(u,nabla_grad(sigma)), dot(u,nabla_grad(tau)))*dx(mesh) \
-    #      + 0.01*alpha_1*h*inner(nabla_grad(sigma),nabla_grad(tau))*dx(mesh)
+    rm += Constant(1)*h*inner(grad(u_)*u,grad(v)*u)*dx
+    rc += h*h*inner(grad(p_),grad(q))*dx + h*h*h*p_*q*dx 
+
+
 
 
     assign(u0, U)
@@ -181,18 +206,29 @@ for i in range(0,20):
     #solve(a == L, U, bcs)
     u, p = U.split()
     
-    
+    """
     rz =  inner(1/r*w_ \
     + alpha_1*dot(u, nabla_grad(w_)) \
     - div(alpha_1*grad(u).T*A(u) \
     + (alpha_1 + alpha_2)*A(u)*A(u) \
     - r*outer(u,u) \
     - alpha_1*p*grad(u).T), tau)*dx(mesh) \
-    + Constant(0.01)*h*inner(grad(w_), grad(tau))*dx(mesh) \
-    + Constant(0.01)*alpha_1*h*inner(dot(u,nabla_grad(w_)), dot(u,nabla_grad(tau)))*dx(mesh)
+    + Constant(0)*h*inner(grad(w_), grad(tau))*dx(mesh) \
+    + Constant(0.1)*alpha_1*h*inner(dot(u,nabla_grad(w_)), dot(u,nabla_grad(tau)))*dx(mesh)
     #+ 1*abs(alpha_1*dot(u('+'),n('+')))*conditional(dot(u('+'),n('+'))<0,1,0)*inner(jump(w_),tau('+'))*dS(mesh)
+    """
     
+    rz =  inner(1/r*w_ \
+     + alpha_1*dot(u, nabla_grad(w_)) \
+     - div(alpha_1*grad(u).T*A(u) \
+     + (alpha_1 + alpha_2)*A(u)*A(u) \
+     - outer(u,u) \
+     + alpha_1*grad(u).T*p), tau)*dx(mesh) \
+     + Constant(0.0)*alpha_1*h*inner(grad(w_), grad(tau))*dx(mesh) \
+     + Constant(1)*alpha_1*h*inner(dot(u,nabla_grad(w_)), dot(u,nabla_grad(tau)))*dx(mesh) 
     
+
+
     #assign(sigma0, sigma)
     if(MPI.rank(mesh.mpi_comm()) == 0):
         print('solve stress')
@@ -200,7 +236,7 @@ for i in range(0,20):
     aa = lhs(rz)
     bb = rhs(rz)
     solve(aa == bb, w) #, bcw)
-    
+   # w.vector()[:] = 0   
  
 
     u0.vector().axpy(-1, U.vector())
