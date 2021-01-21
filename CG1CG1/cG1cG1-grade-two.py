@@ -1,3 +1,4 @@
+
 from mshr import *
 from dolfin import *
 import math,sys
@@ -6,9 +7,22 @@ from ufl import nabla_div
 set_log_active(False)
 
 mesh = Mesh("mesh.xml")
+print(mesh.hmax())
 
-for i in range(4):
+
+for i in range(1):
     mesh = (refine(mesh)) # refine(refine(refine(refine(mesh))))
+
+for i in range(1):
+    cell_markers = MeshFunction("bool", mesh, mesh.topology().dim())
+    for cell in cells(mesh):
+      cell_markers[cell] = False
+      p = cell.midpoint()
+      if (abs(p.y()-0) > (0.5)-0.1 and (p.x()-0.5)>0):
+          cell_markers[cell] = True
+    mesh = refine(mesh, cell_markers)
+
+
 dim = mesh.geometric_dimension()
 
 vtkfile_u = File('Ug2.pvd')
@@ -16,7 +30,7 @@ vtkfile_p = File('Pg2.pvd')
 vtkfile_s = File('Sg2.pvd')
 
 
-alfa = 0.01 
+alfa = 1 
 alpha_1 = Constant(alfa)  #0.001
 alpha_2 = Constant(-alfa)  
 r = Constant(1) # Reynold's number
@@ -66,29 +80,30 @@ else:
     right = 1
 
     
-    uin = Expression(("exp(-1000*1000*(-1-x[0])*(-1-x[0]))*(1.0-(x[1]*x[1]))","0"), degree = pdegV)
+    uin = Expression(("exp(-1000*(-1-x[0])*(-1-x[0]))*(1.0-(x[1]*x[1]))","0"), degree = pdegV)
     boundary_exp = Expression(("exp(-fu*(lb-x[0])*(lb-x[0]))*(1.0-x[1]*x[1]) + \
       (1.0/up)*exp(-fu*(ri+rb-x[0])*(ri+rb-x[0]))*(1.0-((x[1]*x[1])/(up*up)))","0"), \
                        up=upright,ri=right,fu=1000,rb=rbufr,lb=lbufr,degree = 2)
 
     u0 = Expression(("0","0"), degree = pdegV)
     p0 = Expression("0",degree = pdegQ)
-    wi = Expression(("0","-0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdegV)
+    wi = Expression(("0","0.5*8*x[1]*(3*a1+2*a2)"), a1 = alpha_1, a2 = alpha_2, degree = pdegV)
 
 
 bcm1 = DirichletBC(W.sub(0), uin, InflowBoundary())
 bcm2 = DirichletBC(W.sub(0), u0, NoSlipBoundary())
 bcm3 = DirichletBC(W.sub(0), boundary_exp, 'on_boundary')
-bcc = DirichletBC(W.sub(1), p0, OutFlowBoundary())
-#bcw = DirichletBC(V, wi, InflowBoundary())
+bcc = DirichletBC(W.sub(1), p0, InflowBoundary()) #OutFlowBoundary())
+bcw = DirichletBC(V, wi, InflowBoundary())
 
 
 #bcm = [bcm2, bcm1]
-bc = bcc
+#bc = bcc
 
-bcs = bcm3 #
-#bcs = [bcm2, bcm1, bcc]
+bcs = [bcm3]
 
+#bcs = [bcm1, bcm2, bcc]
+#bcs = [bcm3, bcc]
 # TestFunctions
 # v = TestFunction(V)
 #q = TestFunction(Q)
@@ -105,6 +120,7 @@ sigma = Function(T)
 sigma0 = Function(T)
 
 w = Function(V)
+w.vector()[:] = 0
 w_ = TrialFunction(V)
 tau = TestFunction(V)
 
@@ -123,6 +139,7 @@ pst = Function(Q)
 #ust.vector().set_local(uvec_old[:,0])
 #u.vector().axpy(1, ust.vector())
 
+hmin = mesh.hmin()
 
 # Trial Functions
 #w = Function(W)
@@ -142,9 +159,10 @@ def A(z):
 if True:
     um = u
 
-rm = inner(grad(u_),grad(v))*dx - p_*div(v)*dx
-rc = div(u_)*q*dx
-rc += h*h*inner(grad(p_),grad(q))*dx + h*h*h*p_*q*dx
+
+rm = inner(grad(u_),grad(v))*dx(mesh) - p_*div(v)*dx(mesh)
+rc = div(u_)*q*dx(mesh)
+rc += Constant(1)*h*h*inner(grad(p_),grad(q))*dx(mesh) + Constant(0)*h*hmin*p*q*dx
 rm += inner(ust,v)*dx
 rc += inner(pst,q)*dx
 
@@ -153,10 +171,12 @@ a = lhs(rm+rc)
 L = rhs(rm+rc)
 
 Am, b = assemble_system(a, L, bcs)
-solve(Am, U.vector(), b, 'lu')
+solve(Am, U.vector(), b, 'gmres')
 
 #solve(a == L, U, bcs)
 ust_, pst_ = U.split()
+p0 = assemble(pst_*dx)
+#pst_.vector()[:] -= p0
 
 assign(ust, ust_)
 assign(pst, pst_)
@@ -166,7 +186,7 @@ vtkfile_u << u_out
 for i in range(0,20):
 # Constitutive equations
     rm = inner(grad(u_),grad(v))*dx(mesh) - p_*div(v)*dx(mesh) - inner(w,v)*dx #- inner(div(sigma),v)*dx #+ inner(grad(u)*u,v)*dx
-    rc = div(u_)*q*dx
+    rc = div(u_)*q*dx 
 
     """
     rt = inner(sigma\
@@ -181,8 +201,8 @@ for i in range(0,20):
 
 
     # Stabilization
-    rm += Constant(1)*h*inner(grad(u_)*u,grad(v)*u)*dx
-    rc += h*h*inner(grad(p_),grad(q))*dx + h*h*h*p_*q*dx 
+    #rm += Constant(0.2)*h*h*inner(grad(u_)*u,grad(v)*u)*dx
+    rc += Constant(1)*h*h*inner(grad(p_),grad(q))*dx + Constant(0)*h*hmin*q*p_*dx
 
 
 
@@ -201,10 +221,12 @@ for i in range(0,20):
         bc.apply(Am)
         bc.apply(b)"""
     
-    solve(Am, U.vector(), b, 'lu')
+    solve(Am, U.vector(), b, 'gmres')
     
     #solve(a == L, U, bcs)
     u, p = U.split()
+    p0 = assemble(p*dx)
+ #   p.vector()[:] -= p0
     
     """
     rz =  inner(1/r*w_ \
@@ -224,8 +246,8 @@ for i in range(0,20):
      + (alpha_1 + alpha_2)*A(u)*A(u) \
      - outer(u,u) \
      + alpha_1*grad(u).T*p), tau)*dx(mesh) \
-     + Constant(0.0)*alpha_1*h*inner(grad(w_), grad(tau))*dx(mesh) \
-     + Constant(1)*alpha_1*h*inner(dot(u,nabla_grad(w_)), dot(u,nabla_grad(tau)))*dx(mesh) 
+     + Constant(0.1)*h*h*inner(grad(w_), grad(tau))*dx(mesh) \
+     + Constant(1)*hmin*h*alpha_1*inner(dot(u,nabla_grad(w_)), dot(u,nabla_grad(tau)))*dx(mesh) 
     
 
 
@@ -235,7 +257,7 @@ for i in range(0,20):
     #solve(rz == 0, w, bcw)
     aa = lhs(rz)
     bb = rhs(rz)
-    solve(aa == bb, w) #, bcw)
+    solve(aa == bb, w, bcw)
    # w.vector()[:] = 0   
  
 
@@ -245,11 +267,14 @@ for i in range(0,20):
     #relup = errornorm(u,u0,norm_type='H1',degree_rise=2)/norm(u,norm_type='H1')
     if(MPI.rank(mesh.mpi_comm()) == 0):
         print("u update: ", relup)
-    if relup < 1e-8 and i > 3: #(u0.vector().axpy(-1.0, u.vector()).norm("linf") / u.vector().norm("linf")) < 1e-4:
+    if relup < 1e-8 and i > 3:  #(u0.vector().axpy(-1.0, u.vector()).norm("linf") / u.vector().norm("linf")) < 1e-4:
         if(MPI.rank(mesh.mpi_comm()) == 0):
             print ("newton iteration: ", i, "Divergance: ", assemble(sqrt(div(u) * div(u))*dx)) #, " Rel change",
         break
     u, p = U.split()
+    #p00 = assemble(p*dx)
+    #p.vector()[:] -= p00
+    
 assign(u_out, project(u, V))
 assign(w_out, project(w, V))
 assign(p_out, project(p, Q))
@@ -258,6 +283,6 @@ vtkfile_p << p_out#w[3]
 vtkfile_s << w_out # project(sigma,T)#as_matrix([[w[4+a+b] for b in range(0, 3)] for a in range(0, 3)])
 assign(u_out, project(u-ust, V))
 assign(p_out, project(p-pst, Q))
-vtkfile_u << u_out#as_vector((w[0], w[1], w[2]))
+vtkfile_u << u_out #s_vector((w[0], w[1], w[2]))
 vtkfile_p << p_out#w[3]
 vtkfile_s << w_out
